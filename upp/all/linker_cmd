@@ -1,0 +1,35 @@
+-stack           0x00002000//0x00000800      /* Stack Size */
+-heap            0x00002000//0x00000800      /* Heap Size */
+
+
+
+
+/* MODULE MEM */
+MEMORY {
+   //L3RAM       : origin = 0x80000000,  len = 0x100000
+   //IRAM        : origin = 0x11800000,  len = 0x400000
+    VECS:        o = 0xFFFF0000  l = 0x00000080
+    ARMRAM:      o = 0xFFFF0080  l = 0x00001f80 //
+    L2RAM:       o = 0x11800000  l = 0x00040000	// DSPRAM
+    SHAREDRAM:   o = 0x800000FF  l = 0x0001FF00 //SHAREDRAM L3RAM //Actual size 20000 but 256 bytes for uboot
+    SDRAM:       o = 0xC0000000  l = 0x6000000 //96MB (32MB Left for UBOOT)
+
+}
+
+SECTIONS
+{
+  	  vectors           :> L2RAM
+     .cinit             :> SHAREDRAM        
+     .text              :> SHAREDRAM 
+     .stack             :> SHAREDRAM        
+     .bss               :> L2RAM
+     .const             :> L2RAM
+     .data              :> L2RAM
+     .far               :> SDRAM		//L2RAM //
+     .switch            :> L2RAM
+     .sysmem            :> L2RAM		//SDRAM//L2RAM//
+     .tables            :> L2RAM
+     .cio               :> L2RAM
+
+
+}

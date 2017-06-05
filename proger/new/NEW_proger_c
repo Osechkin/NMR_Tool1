@@ -1,0 +1,536 @@
+/*
+ * proger.c
+ *
+ *  Created on: 08.06.2014
+ *      Author: aivanov
+ *      version 0.33
+ */
+
+
+#include "proger.h"
+
+
+void proger_stop ()
+{
+	unsigned char *proger_adr;
+	 proger_adr  = (unsigned char *) PROGER_CONFIG_ADDR;
+	*proger_adr &= 0xFE;//stop proger
+}/* proger_stop */
+
+/*---------------------------------------------------------------------------*/
+
+
+void proger_start ()
+{
+	unsigned char *proger_adr;
+	 proger_adr  = (unsigned char *) PROGER_CONFIG_ADDR;
+	*proger_adr |= 0x01;//start proger
+}/* proger_start */
+
+/*---------------------------------------------------------------------------*/
+
+static int proger_rd_acquisition_info (unsigned char *array, unsigned int byte_count)
+{
+	volatile unsigned char *proger_proc_adr_clr, *proger_proc_adr_inc, *proger_proc_adr_dta;
+	volatile unsigned int k;
+
+	if (byte_count > 1024)
+		return (0);
+
+	proger_proc_adr_clr = (unsigned char *) MEM_ADDR_CNTR_PROC_CLR;
+	proger_proc_adr_inc = (unsigned char *) MEM_ADDR_CNTR_PROC_INC;
+	proger_proc_adr_dta = (unsigned char *) MEM_ADDR_CNTR_PROC_DTA;
+
+	*proger_proc_adr_clr = 0x00;
+	for (k = 0; k < byte_count; k++)
+	{
+		array[k] = *proger_proc_adr_dta;
+		*proger_proc_adr_inc = 0x00;
+	}
+
+	return (1);
+}/* proger_rd_acquisition_info */
+
+/*---------------------------------------------------------------------------*/
+
+int proger_wr_pulseprog (unsigned char *array, unsigned int byte_count)
+{
+	volatile unsigned char *proger_adr_tmp, *proger_adr_clr, *proger_adr_inc, *proger_adr_dta;
+	volatile unsigned int k;
+
+	proger_stop ();
+
+	if (byte_count > PROGER_SIZE_IN_BYTES)
+		return (0);
+
+	proger_adr_tmp = (unsigned char *) MEM_ADDR_TMP_WORD;
+	proger_adr_clr = (unsigned char *) MEM_ADDR_CNTR_CLR;
+	proger_adr_inc = (unsigned char *) MEM_ADDR_CNTR_INC;
+	proger_adr_dta = (unsigned char *) MEM_ADDR_FIFO_DTA;
+
+	*proger_adr_clr = 0x00;
+	for (k = 0; k < byte_count; k++)
+	{
+		*proger_adr_tmp = array[k];
+		*proger_adr_dta = 0x00;
+		*proger_adr_inc = 0x00;
+	}
+
+	return (1);
+}/* proger_wr_pulseprog */
+
+/*---------------------------------------------------------------------------*/
+
+int proger_reset_comm_fifo_counter (void)
+{
+	volatile unsigned char *proger_adr_clr;
+
+	proger_stop ();
+
+	proger_adr_clr = (unsigned char *) MEM_ADDR_CNTR_CLR;
+
+	*proger_adr_clr = 0x00;
+
+	return (1);
+}/* proger_reset_comm_fifo_counter */
+
+/*---------------------------------------------------------------------------*/
+
+int proger_wr_comm_arr_to_fifo (volatile unsigned char *comm)
+{
+	volatile unsigned char *proger_adr_tmp, *proger_adr_inc, *proger_adr_dta;
+	volatile unsigned int k;
+
+	proger_stop ();
+
+	proger_adr_tmp = (unsigned char *) MEM_ADDR_TMP_WORD;
+	proger_adr_inc = (unsigned char *) MEM_ADDR_CNTR_INC;
+	proger_adr_dta = (unsigned char *) MEM_ADDR_FIFO_DTA;
+
+	for (k = 0; k < 4; k++)
+	{
+		*proger_adr_tmp = comm[k];
+		*proger_adr_dta = 0x00;
+		*proger_adr_inc = 0x00;
+	}
+
+	return (1);
+}/* proger_wr_comm_arr_to_fifo */
+
+/*---------------------------------------------------------------------------*/
+
+int proger_wr_comm_to_fifo (unsigned char comm, unsigned char arg1, unsigned char arg2, unsigned char arg3)
+{
+	volatile unsigned char *proger_adr_tmp, *proger_adr_inc, *proger_adr_dta;
+	volatile unsigned int k;
+
+	proger_stop ();
+
+	proger_adr_tmp = (unsigned char *) MEM_ADDR_TMP_WORD;
+	proger_adr_inc = (unsigned char *) MEM_ADDR_CNTR_INC;
+	proger_adr_dta = (unsigned char *) MEM_ADDR_FIFO_DTA;
+
+	*proger_adr_tmp = comm;
+	*proger_adr_dta = 0x00;
+	*proger_adr_inc = 0x00;
+
+	*proger_adr_tmp = arg1;
+	*proger_adr_dta = 0x00;
+	*proger_adr_inc = 0x00;
+
+	*proger_adr_tmp = arg2;
+	*proger_adr_dta = 0x00;
+	*proger_adr_inc = 0x00;
+
+	*proger_adr_tmp = arg3;
+	*proger_adr_dta = 0x00;
+	*proger_adr_inc = 0x00;
+
+	return (1);
+}/* proger_wr_comm_arr_to_fifo */
+
+/*---------------------------------------------------------------------------*/
+
+static int proger_rd_pulseprog (unsigned char *array, unsigned int byte_count)
+{
+	volatile unsigned char *proger_adr_tmp, *proger_adr_clr, *proger_adr_inc, *proger_adr_dta;
+	volatile unsigned int k, tmp;
+
+	proger_stop ();
+
+	if (byte_count > PROGER_SIZE_IN_BYTES)
+		return (0);
+
+	proger_adr_tmp = (unsigned char *) MEM_ADDR_TMP_WORD;
+	proger_adr_clr = (unsigned char *) MEM_ADDR_CNTR_CLR;
+	proger_adr_inc = (unsigned char *) MEM_ADDR_CNTR_INC;
+	proger_adr_dta = (unsigned char *) MEM_ADDR_FIFO_DTA;
+
+	*proger_adr_clr = 0x00;
+	for (k = 0; k < byte_count; k++)
+	{
+		array[k] = *proger_adr_dta;
+		tmp = array[k];
+		*proger_adr_inc = 0x00;
+	}
+
+	return (1);
+}/* proger_rd_pulseprog */
+
+/*---------------------------------------------------------------------------*/
+
+static int proger_compare_pulseprog (unsigned char *array, unsigned int byte_count)
+{
+	volatile unsigned char *proger_adr_tmp, *proger_adr_clr, *proger_adr_inc, *proger_adr_dta;
+	volatile unsigned int k, result;
+	volatile unsigned char array_prog [PROGER_SIZE_IN_BYTES];
+
+	proger_stop ();
+
+	if (byte_count > PROGER_SIZE_IN_BYTES)
+		return (0);
+
+	proger_adr_tmp = (unsigned char *) MEM_ADDR_TMP_WORD;
+	proger_adr_clr = (unsigned char *) MEM_ADDR_CNTR_CLR;
+	proger_adr_inc = (unsigned char *) MEM_ADDR_CNTR_INC;
+	proger_adr_dta = (unsigned char *) MEM_ADDR_FIFO_DTA;
+
+	*proger_adr_clr = 0x00;
+	for (k = 0; k < byte_count; k++)
+	{
+		array[k] = *proger_adr_dta;
+		*proger_adr_inc = 0x00;
+	}
+
+	result = 1;
+
+	for (k = 0; k < byte_count; k++)
+	{
+		if (array_prog[k] != array[k])
+		{
+			result = 0;
+			break;
+		}
+	}
+
+	return (result);
+}/* proger_compare_pulseprog */
+
+/*---------------------------------------------------------------------------*/
+
+int proger_mem_init ()
+{
+	volatile unsigned char comm [4];
+	volatile unsigned int k;
+
+	proger_stop ();
+	proger_reset_comm_fifo_counter();
+
+	memset(comm, 0x00, 4);
+
+	for (k = 0; k < PROG_MAX_COMMANDS; k++)
+	{
+		proger_wr_comm_arr_to_fifo (comm);
+	}
+
+	return (1);
+}/* proger_mem_init */
+
+/*---------------------------------------------------------------------------*/
+
+int proger_mem_init2 ()
+{
+	volatile unsigned char array [PROGER_SIZE_IN_BYTES];
+	volatile unsigned int k;
+
+	proger_stop ();
+
+	for (k = 0; k < PROGER_SIZE_IN_BYTES; k++)
+	{
+		array[k] = 0x00;
+	}
+
+	proger_wr_pulseprog ( (unsigned char *) array, PROGER_SIZE_IN_BYTES);
+
+	return (1);
+}/* proger_mem_init2 */
+
+/*---------------------------------------------------------------------------*/
+
+static int proger_test_mem_pulseprog ()
+{
+	volatile unsigned char array [PROGER_SIZE_IN_BYTES];
+	volatile unsigned int k, result;
+
+	for (k = 0; k < PROGER_SIZE_IN_BYTES; k++)
+	{
+		array[k] = k;
+	}
+
+	result = proger_compare_pulseprog ( (unsigned char *) array, PROGER_SIZE_IN_BYTES);
+
+	proger_mem_init ();
+
+	return (result);
+}/* proger_test_mem_pulseprog */
+
+/*---------------------------------------------------------------------------*/
+
+
+
+/*
+void proger_stop ()
+{
+	unsigned char *proger_adr;
+	 proger_adr  = (unsigned char *) PROGER_CONFIG_ADDR;
+	*proger_adr &= 0xFE;//stop proger
+}/* proger_stop */
+
+/*---------------------------------------------------------------------------*/
+
+/*
+void proger_start ()
+{
+	unsigned char *proger_adr;
+	 proger_adr  = (unsigned char *) PROGER_CONFIG_ADDR;
+	*proger_adr |= 0x01;//start proger
+}/* proger_start */
+
+/*---------------------------------------------------------------------------*/
+
+/*
+static int proger_rd_acquisition_info (unsigned char *array, unsigned int byte_count)
+{
+	unsigned char *proger_proc_adr_clr, *proger_proc_adr_inc, *proger_proc_adr_dta;
+	unsigned int k;
+
+	if (byte_count > 1024)
+		return (0);
+
+	proger_proc_adr_clr = (unsigned char *) MEM_ADDR_CNTR_PROC_CLR;
+	proger_proc_adr_inc = (unsigned char *) MEM_ADDR_CNTR_PROC_INC;
+	proger_proc_adr_dta = (unsigned char *) MEM_ADDR_CNTR_PROC_DTA;
+
+	*proger_proc_adr_clr = 0x00;
+	for (k = 0; k < byte_count; k++)
+	{
+		array[k] = *proger_proc_adr_dta;
+		*proger_proc_adr_inc = 0x00;
+	}
+
+	return (1);
+}/* proger_rd_acquisition_info */
+
+/*---------------------------------------------------------------------------*/
+
+/*
+int proger_wr_pulseprog (unsigned char *array, unsigned int byte_count)
+{
+	unsigned char *proger_adr_tmp, *proger_adr_clr, *proger_adr_inc, *proger_adr_dta;
+	unsigned int k;
+
+	proger_stop ();
+
+	if (byte_count > PROGER_SIZE_IN_BYTES)
+		return (0);
+
+	proger_adr_tmp = (unsigned char *) MEM_ADDR_TMP_WORD;
+	proger_adr_clr = (unsigned char *) MEM_ADDR_CNTR_CLR;
+	proger_adr_inc = (unsigned char *) MEM_ADDR_CNTR_INC;
+	proger_adr_dta = (unsigned char *) MEM_ADDR_FIFO_DTA;
+
+	*proger_adr_clr = 0x00;
+	for (k = 0; k < byte_count; k++)
+	{
+		*proger_adr_tmp = array[k];
+		*proger_adr_dta = 0x00;
+		*proger_adr_inc = 0x00;
+	}
+
+	return (1);
+}/* proger_wr_pulseprog */
+
+/*---------------------------------------------------------------------------*/
+
+/*
+static int proger_rd_pulseprog (unsigned char *array, unsigned int byte_count)
+{
+	unsigned char *proger_adr_tmp, *proger_adr_clr, *proger_adr_inc, *proger_adr_dta;
+	unsigned int k, tmp;
+
+	proger_stop ();
+
+	if (byte_count > PROGER_SIZE_IN_BYTES)
+		return (0);
+
+	proger_adr_tmp = (unsigned char *) MEM_ADDR_TMP_WORD;
+	proger_adr_clr = (unsigned char *) MEM_ADDR_CNTR_CLR;
+	proger_adr_inc = (unsigned char *) MEM_ADDR_CNTR_INC;
+	proger_adr_dta = (unsigned char *) MEM_ADDR_FIFO_DTA;
+
+	*proger_adr_clr = 0x00;
+	for (k = 0; k < byte_count; k++)
+	{
+		array[k] = *proger_adr_dta;
+		tmp = array[k];
+		*proger_adr_inc = 0x00;
+	}
+
+	return (1);
+}/* proger_rd_pulseprog */
+
+/*---------------------------------------------------------------------------*/
+
+/*
+static int proger_compare_pulseprog (unsigned char *array, unsigned int byte_count)
+{
+	unsigned char *proger_adr_tmp, *proger_adr_clr, *proger_adr_inc, *proger_adr_dta;
+	unsigned int k, result;
+	unsigned char array_prog [PROGER_SIZE_IN_BYTES];
+
+	proger_stop ();
+
+	if (byte_count > PROGER_SIZE_IN_BYTES)
+		return (0);
+
+	proger_adr_tmp = (unsigned char *) MEM_ADDR_TMP_WORD;
+	proger_adr_clr = (unsigned char *) MEM_ADDR_CNTR_CLR;
+	proger_adr_inc = (unsigned char *) MEM_ADDR_CNTR_INC;
+	proger_adr_dta = (unsigned char *) MEM_ADDR_FIFO_DTA;
+
+	*proger_adr_clr = 0x00;
+	for (k = 0; k < byte_count; k++)
+	{
+		array[k] = *proger_adr_dta;
+		*proger_adr_inc = 0x00;
+	}
+
+	result = 1;
+
+	for (k = 0; k < byte_count; k++)
+	{
+		if (array_prog[k] != array[k])
+		{
+			result = 0;
+			break;
+		}
+	}
+
+	return (result);
+}/* proger_compare_pulseprog */
+
+/*---------------------------------------------------------------------------*/
+
+/*
+int proger_mem_init ()
+{
+	unsigned char array [PROGER_SIZE_IN_BYTES];
+	unsigned int k;
+
+	proger_stop ();
+
+	for (k = 0; k < PROGER_SIZE_IN_BYTES; k++)
+	{
+		array[k] = 0x00;
+	}
+
+	proger_wr_pulseprog (array, PROGER_SIZE_IN_BYTES);
+
+	return (1);
+}/* proger_mem_init */
+
+/*---------------------------------------------------------------------------*/
+
+/*
+static int proger_test_mem_pulseprog ()
+{
+	unsigned char array [PROGER_SIZE_IN_BYTES];
+	unsigned int k, result;
+
+	for (k = 0; k < PROGER_SIZE_IN_BYTES; k++)
+	{
+		array[k] = k;
+	}
+
+	result = proger_compare_pulseprog (array, PROGER_SIZE_IN_BYTES);
+
+	proger_mem_init ();
+
+	return (result);
+}/* proger_test_mem_pulseprog */
+
+/*---------------------------------------------------------------------------*/
+
+/*
+int main_proger_wr_pulseprog_test_GPIO3 ()
+{
+	//unsigned char array [PROGER_SIZE_IN_BYTES], array_prog [PROGER_SIZE_IN_BYTES];
+	unsigned int k, result;
+	unsigned char array[PROGER_SIZE_IN_BYTES] = {
+
+			//241	,	0	,	0x27	,	0x0F	, // 10 ms delay before RF pulses
+			241	,	0	,	0x00	,	0x63	, // 10 ms delay before RF pulses
+
+				210	,	0x00,	0x00,	0x10 | 0x00,	//out reg 4 goes high - awake led lights up //GPIO3 goes low - rf pulses started
+
+			241	,	0	,	0x27	,	0x0F	, // 10 ms delay before RF pulses
+
+				210	,	0x00,	0x00,	0x10 | 0x08,	//out reg 4 goes high - awake led lights up //GPIO3 goes low - rf pulses started
+
+			241	,	0	,	0	,	9	, // duration of GPIO pulse
+
+			//	231	,	0	,	0	,	200	, //RF pulse 20 mks
+
+				210	,	0x00,	0x00,	0x10 | 0x08 | 0x04, //GPIO2 goes low - adc window started
+
+				243	,	0	,	0x01,	0x2B, // ecos number = 300
+
+			241	,	0	,	0x01	,	0xC1, // delay 450 mks
+
+			241	,	0	,	0	,	99	,	 // adc time 100 mks
+
+				242	,	0	,	0	,	1	,
+
+			241	,	0	,	0x01	,	0xC1, // delay 450 mks
+
+				242	,	0	,	0	,	0	, // adc off
+
+				244	,	0	,	0	,	0	, // end of cycles
+
+			241	,	0	,	0x27	,	0x0F	, // 10 ms delay after RF pulses
+
+				210	,	0x00	,	0x00	,	0x10  | 0x08,	//GPIO2 goes high - adc window ended
+
+			241	,	0	,	0	,	9	,
+
+				210	,	0x00,	0x00,	0x00, //GPIO3 goes high -  RF pulses ended, awake led off
+
+			241	,	0	,	0	,	19	,	// last delay
+
+				243	,
+				0	,
+				0	,
+				0	,
+
+			241,	0x0F,	0x42,	0x3F,
+
+				244	,
+				0	,
+				0	,
+				0	,
+
+				0	,
+				0	,
+				0	,
+				0	,
+
+	};
+
+
+	proger_stop ();
+	//proger_mem_init ();
+
+	proger_wr_pulseprog (array, 25*4);
+
+}/* main_proger_wr_pulseprog_test_GPIO3 */
+;

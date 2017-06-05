@@ -1,0 +1,119 @@
+/*
+ * proger_defines.h
+ *
+ *  Created on: 18.04.2015
+ *      Author: aivanov
+ */
+
+#ifndef PROGER_DEFINES_H_
+#define PROGER_DEFINES_H_
+
+
+#define PROGER_BASE_ADDR   (0x66000000 + 0)
+#define PROGER_CONFIG_ADDR (PROGER_BASE_ADDR + 28)
+
+#define MEM_ADDR_TMP_WORD (PROGER_BASE_ADDR + 4)
+#define MEM_ADDR_CNTR_CLR (PROGER_BASE_ADDR + 8)
+#define MEM_ADDR_CNTR_INC (PROGER_BASE_ADDR + 32)
+#define MEM_ADDR_FIFO_DTA (PROGER_BASE_ADDR + 12)
+
+#define MEM_ADDR_CNTR_PROC_CLR (PROGER_BASE_ADDR + 40)
+#define MEM_ADDR_CNTR_PROC_INC (PROGER_BASE_ADDR + 44)
+#define MEM_ADDR_CNTR_PROC_DTA (PROGER_BASE_ADDR + 48)
+
+//Programmer type number and firmware version
+//Interval type programmer has type number 1,
+//straight time programmer has type 0.
+#define  PROGR_TYPE 1 UL;
+#define  PROGR_VERS 49 UL;
+#define  PROGR_SUB_VERS 'e';
+
+//Programmer commands numbers defined here
+
+#define	COM_RET						0
+
+#define	COM_SET_VC_DAC_1			197
+#define	COM_SET_VC_DAC_2			198
+
+#define	COM_BLANK_PWR				199
+
+#define	COM_PROC_CONTROL_REG		200
+
+#define	COM_WR_RST_PROC_MEM			201
+#define	COM_WR_INC_PROC_MEM			202
+
+#define	COM_WR_RST_CONF_EXT_DEV_MEM	203
+#define	COM_WR_INC_CONF_EXT_DEV_MEM	204
+
+#define	COM_ENB_TUNE				205
+#define	COM_SET_RCV_ADDR			206
+
+#define	COM_SET_PA_ADDR				217
+
+#define	COM_SWITCH_FRQ				218
+
+#define	COM_PH_RST					219
+
+#define	COM_OFS01					220
+#define	COM_PH01					221
+#define	COM_RF01					222
+#define	COM_RF01_ON_OFF				223
+
+#define	COM_OFS02					225
+#define	COM_PH02					226
+#define	COM_RF02					227
+#define	COM_RF02_ON_OFF				228
+
+#define	COM_OFS03					230
+#define	COM_PH03					231
+#define	COM_RF03					232
+#define	COM_RF03_ON_OFF				233
+
+#define	COM_OFS04					235
+#define	COM_PH04					236
+#define	COM_RF04					237
+#define	COM_RF04_ON_OFF				238
+
+#define	COM_TIME					241
+
+#define	COM_ADS_IN					242
+
+#define	COM_CYCLE_OPEN				243
+#define	COM_CYCLE_CLOSE				244
+
+#define	COM_MACRO_JUMP				245
+#define	COM_MACRO_RET				246
+
+#define	COM_TEST_CONF_WR			250
+
+#define	COM_SYNC					251
+
+#define  COM_CYCLE_OPEN				253
+#define  COM_CYCLE_CLOSE			254
+
+#define	COM_STOP					255
+
+//#define	COM_TIME2				16// not imlemented
+//#define	COM_CYCLE_OPEN2			17
+//#define	COM_CYCLE_CLOSE2		18
+//#define	COM_RF01W				32
+//#define	COM_ADC					33
+
+// Programmer command parameters definitions.
+
+// Number of bits in command and output bus data
+// (data lenth of programmer external bus).
+#define	PROGR_OUT_BUS_WIDE	8
+
+// Number of bits in output address bus (address of programmer external bus).
+#define	PROGR_OUT_ADR_WIDE	16
+
+// Number of bytes in singe command.
+#define	PROG_BYTES_IN_COM	4
+
+// Maximum count of commands.
+#define	PROG_MAX_COMMANDS	4096
+
+#define PROGER_SIZE_IN_BYTES   (PROG_BYTES_IN_COM*PROG_MAX_COMMANDS)
+
+#endif /* PROGER_DEFINES_H_ */

@@ -1,0 +1,45 @@
+/*
+ * proger.h
+ *
+ *  Created on: 17.12.2014
+ *      Author: aivanov
+ */
+
+#ifndef PROGER_H_
+#define PROGER_H_
+
+#include "proger_defines.h"
+
+/*
+#define PROGER_SIZE_IN_BYTES   (16*1024)
+
+#define PROGER_BASE_ADDR   (0x66000000 + 0)
+#define PROGER_CONFIG_ADDR (PROGER_BASE_ADDR + 28)
+
+#define MEM_ADDR_TMP_WORD (PROGER_BASE_ADDR + 4)
+#define MEM_ADDR_CNTR_CLR (PROGER_BASE_ADDR + 8)
+#define MEM_ADDR_CNTR_INC (PROGER_BASE_ADDR + 32)
+#define MEM_ADDR_FIFO_DTA (PROGER_BASE_ADDR + 12)
+
+#define MEM_ADDR_CNTR_PROC_CLR (PROGER_BASE_ADDR + 40)
+#define MEM_ADDR_CNTR_PROC_INC (PROGER_BASE_ADDR + 44)
+#define MEM_ADDR_CNTR_PROC_DTA (PROGER_BASE_ADDR + 48)
+*/
+
+void proger_stop ();
+void proger_start ();
+int proger_rd_acquisition_info (unsigned char *array, unsigned int byte_count);
+int proger_wr_pulseprog (unsigned char *array, unsigned int byte_count);
+int proger_reset_comm_fifo_counter (void);
+int proger_wr_comm_arr_to_fifo (volatile unsigned char *comm);
+int proger_wr_comm_to_fifo (unsigned char comm, unsigned char arg1, unsigned char arg2, unsigned char arg3);
+int proger_rd_pulseprog (unsigned char *array, unsigned int byte_count);
+static int proger_compare_pulseprog (unsigned char *array, unsigned int byte_count);
+int proger_mem_init ();
+int proger_mem_init2 ();
+static int proger_test_mem_pulseprog ();
+int main_proger_wr_pulseprog_test_GPIO3 ();
+
+
+
+#endif /* PROGER_H_ */

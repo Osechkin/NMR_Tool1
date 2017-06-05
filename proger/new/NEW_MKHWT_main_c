@@ -1,0 +1,1835 @@
+/*
+ * main.c
+ *
+ *  Created on: 24.10.2013
+ *      Author: Andrey
+ */
+//current version 0.02
+
+#include "UART_interrupt_loopback_dspL138.h"
+#include <ti/pspiom/cslr/cslr.h>
+#include <math.h>
+#include "upp/upp.h"
+#include "proger/proger.h"
+#include <ti/pspiom/cslr/cslr_gpio.h>
+//#include <ti/pspiom/cslr/cslr_uart.h>
+//#include <ti/pspiom/cslr/cslr_hpi.h>
+//#include "OMAPL138_common.h"
+
+
+unsigned char array [PROGER_SIZE_IN_BYTES], array_prog [PROGER_SIZE_IN_BYTES];
+
+#define UART_BASE			11539200//added line 1 of 5
+#define BaudRate			19200//38400//115200//38400///added line 2 of 5
+#define UART_COMM_START 0x31
+
+#define UPP_ARRAYS_SIZE 1024*1
+
+char transmitData[8] = {'l', 'o', 'o', 'p', 'b', 'a', 'c', 'k'};
+volatile char receiveData[8];
+volatile int prioritizedINT;
+
+volatile char UART_command_start = 0;
+
+char in_arr[1000];
+int in_cnt = 0;
+
+
+
+unsigned char in_upp_arr[UPP_ARRAYS_SIZE];
+unsigned char out_upp_arr[UPP_ARRAYS_SIZE];
+volatile unsigned int reg1=0, reg2=0, reg3=0;
+unsigned short byte_count = 128, line_count = 1;// max value for both is 64*1024-1
+volatile unsigned int upp_int_status = 0;
+volatile Bool uppFull;
+volatile static unsigned int upp_isr_count = 0;
+
+
+CSL_UartRegsOvly uartRegs;
+extern CSL_UartRegsOvly uart1Regs;//defined in OMAPL1x_common.c
+extern CSL_UartRegsOvly uart2Regs;//defined in OMAPL1x_common.c
+extern CSL_UartRegsOvly uart3Regs;//defined in OMAPL1x_common.c
+//CSL_UartRegsOvly uart1Regs = (CSL_UartRegsOvly)(CSL_UART_1_REGS); //addded to OMAPL1x_common.c
+//CSL_GpioBankRegs gpioRegs;
+//extern CSL_GpioBankRegs gpio0Regs;
+extern CSL_GpioRegsOvly gpioRegs;
+
+static void UART_interrupt_loopback_DSPexample2 ();
+static void	upp_check_simple(unsigned short byte_count, unsigned short line_count);
+static void	upp_check_poll(unsigned short byte_count, unsigned short line_count);
+//void setup_upp_int_6 ();
+static void	upp_check_isr(unsigned short byte_count, unsigned short line_count);
+static void	upp_check_rx_isr(unsigned short byte_count, unsigned short line_count);
+static void UART_UPP_sender ();
+static void uart_enable ();
+//static void upp_start (unsigned short byte_count, unsigned short line_count, unsigned char *upp_data);
+//static void proger_start ();
+//static void proger_stop ();
+void UART_COM_STOP_TEST ();
+void UART_COM_241_TEST ();
+void UART_COM_CYCLES_TEST ();
+void UART_COM_CP_TEST ();
+void UART0_TX_TEST ();
+static int main_proger_wr_pulseprog_test_GPIO3 ();
+static int main_proger_wr_pulseprog_test_FRQ ();
+void init_GPIO ();
+
+
+void enable_UART(CSL_UartRegsOvly uartRegs);
+void reset_UART(CSL_UartRegsOvly uartRegs);
+void UART_RX_EN(CSL_UartRegsOvly uartRegs);
+void UART_TX_EN(CSL_UartRegsOvly uartRegs);
+void UART_RX_DIS(CSL_UartRegsOvly uartRegs);
+void UART_TX_DIS(CSL_UartRegsOvly uartRegs);
+void UART_RX_RST(CSL_UartRegsOvly uartRegs);
+void UART_TX_RST(CSL_UartRegsOvly uartRegs);
+
+void RS485_TX_ON();
+void RS485_TX_OFF();
+void RS485_RX_ON();
+void RS485_RX_OFF();
+void init_RS485();
+void RS485_sendchar(unsigned char ch);
+void RS485_TX_TST_INFINITE();
+void in_arr_clear();
+
+void P13_CLR();
+void P13_SET();
+void P14_CLR();
+void P14_SET();
+void P15_CLR();
+void P15_SET();
+void test_GPIO ();
+
+//extern void	memset(* unsigned int, char, unsigned int);
+
+/*---------------------------------------------------------------------------*/
+
+static void setup_UART ()
+{
+	// Configure Baud Rate; 0x64 = 115200 Baud Rate for 13x Sampling
+	//	CSL_FINS(uartRegs->DLL, UART_DLL_DLL, 0x64); //initial line
+
+	Uint32 divisor = UART_BASE / BaudRate;//added line 3 of 5
+	CSL_FINS(uartRegs->DLL, UART_DLL_DLL, divisor & 0x000000FF);//added line 4 of 5
+	CSL_FINS(uartRegs->DLH, UART_DLH_DLH, (divisor >> 8) & 0x000000FF);//added line 4 of 5
+
+	// Select 8 Bit Word Length
+	CSL_FINST(uartRegs->LCR, UART_LCR_WLS, 8BITS);
+
+	// Select 1 Stop Bit
+	CSL_FINST(uartRegs->LCR, UART_LCR_STB, 1BIT);
+
+	// Select 13x Oversampling
+	CSL_FINST(uartRegs->MDR, UART_MDR_OSM_SEL, 13XOVERSAMPLING);
+
+	// Select Loopback Mode
+	//CSL_FINST(uartRegs->MCR, UART_MCR_LOOP, ENABLE);
+	CSL_FINST(uartRegs->MCR, UART_MCR_LOOP, DISABLE);
+
+	// Enable UART Interrupts (Receive & Transmit)
+	CSL_FINST(uartRegs->IER, UART_IER_ERBI, ENABLE);
+	CSL_FINST(uartRegs->IER, UART_IER_ETBEI, ENABLE);
+}/* setup_UART */
+/*---------------------------------------------------------------------------*/
+
+/*-----------------------------------------------------------------------------
+ *
+ * 						Main
+ *
+ *---------------------------------------------------------------------------*/
+void main (void)
+{
+	_disable_interrupts();
+	//shutdown_ARM();
+	//wakeup_ARM();
+
+	uartRegs = uart0Regs;
+	proger_stop();
+
+	// Initialize OMAPL138 EVM (Configure Pins with UART; UART with DSP)
+	init_OMAPL138();
+
+	// Enable Peripherals (UART)
+	enable_module_clocks();
+
+	memset_array (in_upp_arr, 0x00, UPP_ARRAYS_SIZE);
+
+	//test_proger_rd_acquisition_info();
+	//main_proger_test_mem_pulseprog();
+
+	//while(1)
+		//upp_check_simple(byte_count, line_count);
+		//upp_check_poll(byte_count, line_count);
+		//upp_check_isr(byte_count, line_count);
+		//upp_check_rx_isr(byte_count, line_count);// most advanced
+
+	// Setup Peripherals; Run Example
+	if(modulesEnabled)
+	{
+//		init_GPIO ();
+//		init_RS485();
+//test_GPIO ();
+		reset_UART(uartRegs);
+		// Configure UART2 in Loopback Mode and Enable UART Interrupts
+		setup_UART();
+
+		// Map system interrupts to the DSP interrupt controller
+		setup_DSP_INTC();
+
+		init_upp();
+		//looopback_upp();//BE SURE TO LOAD PROPER FPGA FILE! Or Processor may be damaged! Should be called after init_upp()
+		setup_upp_int_6();
+		init_upp_ints();//disable for upp_check_poll usage
+		printf("\n\tuart and upp inited\n");
+
+		_enable_interrupts();
+
+		uart_enable();
+		//upp_start (byte_count, line_count);
+
+		//RS485_TX_TST_INFINITE();
+
+		//while (1)
+		{
+			dummyDelay(1);
+			//dummyDelay(8000);
+			//CSL_FINS(uartRegs->THR, UART_THR_DATA, 0xF1);
+		}
+
+		//main_proger_wr_pulseprog();
+
+/*
+		while (1)
+		{
+			main_proger_wr_pulseprog_test_GPIO3();
+			proger_start();
+			dummyDelay(2000);
+			proger_stop();
+			dummyDelay(2000);
+		}
+*/
+
+		//main_proger_wr_pulseprog();
+		//main_proger_wr_pulseprog_test_GPIO6();
+		//main_proger_wr_pulseprog_test_STOP_COM();
+
+		while (1)
+			//UART_COM_CP_TEST();
+			//UART_COM_CYCLES_TEST();
+			//UART_COM_241_TEST();
+			//UART_COM_STOP_TEST();
+			UART_UPP_sender();
+
+	}
+
+
+}/* End of main */
+
+
+/*-----------------------------------------------------------------------------
+ *
+ * 						Internal Functions Defined
+ *
+ *---------------------------------------------------------------------------*/
+static void init_OMAPL138 (void)
+{
+	// Open Permissions to SYSCFG Registers
+	CSL_FINS(sysRegs->KICK0R, SYSCFG_KICK0R_KICK0, KICK0_KEY);
+	CSL_FINS(sysRegs->KICK1R, SYSCFG_KICK1R_KICK1, KICK1_KEY);
+
+	//CSL_FINS(sysRegs->HOST0CFG, SYSCFG_HOST0CFG_BOOTRDY, 0x00);//added aivanov to shutdown ARM core
+	// Intrinsic Function to Disable Interrupts
+	_disable_interrupts();
+	// Disable UART Receiver/Transmitter
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_URRST, RESET);
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_UTRST, RESET);
+
+
+	int num = -1;
+	if (uartRegs == uart0Regs) num = 0;
+	else if (uartRegs == uart1Regs) num = 1;
+	else if (uartRegs == uart2Regs) num = 2;
+
+	if (num == 0)
+	{
+		// Configure UART0 Transmit & Receive Signals
+		CSL_FINST(sysRegs->PINMUX3, SYSCFG_PINMUX3_PINMUX3_27_24, UART0_CTS);
+		CSL_FINST(sysRegs->PINMUX3, SYSCFG_PINMUX3_PINMUX3_31_28, UART0_RTS);
+		CSL_FINST(sysRegs->PINMUX3, SYSCFG_PINMUX3_PINMUX3_23_20, UART0_TXD);
+		CSL_FINST(sysRegs->PINMUX3, SYSCFG_PINMUX3_PINMUX3_19_16, UART0_RXD);
+
+		// Configure UART0 with the DSP CPU
+		CSL_FINST(sysRegs->SUSPSRC, SYSCFG_SUSPSRC_UART0SRC, DSP);
+	}
+	else if (num == 1)
+	{
+		// Configure UART1 Transmit & Receive Signals
+		CSL_FINST(sysRegs->PINMUX0, SYSCFG_PINMUX0_PINMUX0_23_20, UART1_CTS);
+		CSL_FINST(sysRegs->PINMUX0, SYSCFG_PINMUX0_PINMUX0_19_16, UART1_RTS);
+		CSL_FINST(sysRegs->PINMUX4, SYSCFG_PINMUX4_PINMUX4_31_28, UART1_TXD);
+		CSL_FINST(sysRegs->PINMUX4, SYSCFG_PINMUX4_PINMUX4_27_24, UART1_RXD);
+
+		// Configure UART1 with the DSP CPU
+		CSL_FINST(sysRegs->SUSPSRC, SYSCFG_SUSPSRC_UART1SRC, DSP);
+	}
+	else if (num == 2)
+	{
+		// Configure UART2 Transmit & Receive Signals
+		CSL_FINST(sysRegs->PINMUX0, SYSCFG_PINMUX0_PINMUX0_31_28, UART2_CTS);
+		CSL_FINST(sysRegs->PINMUX0, SYSCFG_PINMUX0_PINMUX0_27_24, UART2_RTS);
+		CSL_FINST(sysRegs->PINMUX4, SYSCFG_PINMUX4_PINMUX4_23_20, UART2_TXD);
+		CSL_FINST(sysRegs->PINMUX4, SYSCFG_PINMUX4_PINMUX4_19_16, UART2_RXD);
+
+		// Configure UART2 with the DSP CPU
+		CSL_FINST(sysRegs->SUSPSRC, SYSCFG_SUSPSRC_UART2SRC, DSP);
+	}
+
+	// Close Permissions to SYSCFG Registers
+	CSL_FINS(sysRegs->KICK0R, SYSCFG_KICK0R_KICK0, KICK_LOCK);
+}/* init_OMAPL138 */
+
+/*---------------------------------------------------------------------------*/
+
+static void enable_module_clocks ()
+{
+	modulesEnabled = FALSE;
+
+	int num = -1;
+	if (uartRegs == uart0Regs) num = 0;
+	else if (uartRegs == uart1Regs) num = 1;
+	else if (uartRegs == uart2Regs) num = 2;
+
+	if (num == 0)															// UART0
+	{
+		// Ensure previous initiated transitions have finished
+		if(check_psc_transition(CSL_PSC_0) == pscTimeout) return;
+
+		// Enable peripherals; Initiate transition
+		CSL_FINST(psc0Regs->MDCTL[CSL_PSC_UART0], PSC_MDCTL_NEXT, ENABLE);	// UART0
+		CSL_FINST(psc0Regs->PTCMD, PSC_PTCMD_GO0, SET);
+
+		// Ensure previous initiated transitions have finished
+		if(check_psc_transition(CSL_PSC_0) == pscTimeout) return;
+
+		// Ensure modules enabled
+		if(check_psc_MDSTAT(CSL_PSC_0, CSL_PSC_UART0, CSL_PSC_MDSTAT_STATE_ENABLE) == pscTimeout) return;	// UART0
+	}
+	else if (num == 1)	// UART1
+	{
+		// Ensure previous initiated transitions have finished
+		if(check_psc_transition(CSL_PSC_1) == pscTimeout) return;
+
+		// Enable peripherals; Initiate transition
+		CSL_FINST(psc1Regs->MDCTL[CSL_PSC_UART1], PSC_MDCTL_NEXT, ENABLE);	// UART1
+		CSL_FINST(psc1Regs->PTCMD, PSC_PTCMD_GO0, SET);
+
+		// Ensure previous initiated transitions have finished
+		if(check_psc_transition(CSL_PSC_1) == pscTimeout) return;
+
+		// Ensure modules enabled
+		if(check_psc_MDSTAT(CSL_PSC_1, CSL_PSC_UART1, CSL_PSC_MDSTAT_STATE_ENABLE) == pscTimeout) return;	// UART1
+	}
+	else if (num == 2)	// UART2
+	{
+		// Ensure previous initiated transitions have finished
+		if(check_psc_transition(CSL_PSC_1) == pscTimeout) return;
+
+		// Enable peripherals; Initiate transition
+		CSL_FINST(psc1Regs->MDCTL[CSL_PSC_UART2], PSC_MDCTL_NEXT, ENABLE);	// UART2
+		CSL_FINST(psc1Regs->PTCMD, PSC_PTCMD_GO0, SET);
+
+		// Ensure previous initiated transitions have finished
+		if(check_psc_transition(CSL_PSC_1) == pscTimeout) return;
+
+		// Ensure modules enabled
+		if(check_psc_MDSTAT(CSL_PSC_1, CSL_PSC_UART2, CSL_PSC_MDSTAT_STATE_ENABLE) == pscTimeout) return;	// UART2
+	}
+
+	modulesEnabled = TRUE;
+}/* enable_module_clocks */
+
+
+/*---------------------------------------------------------------------------*/
+
+static void setup_DSP_INTC ()
+{
+	int num = -1;
+	if (uartRegs == uart0Regs) num = 0;
+	else if (uartRegs == uart1Regs) num = 1;
+	else if (uartRegs == uart2Regs) num = 2;
+
+	if (num == 0)
+	{
+		// Map UART0 system interrupts to DSP INT4
+		CSL_FINS(dspintcRegs->INTMUX1, DSPINTC_INTMUX1_INTSEL4, CSL_INTC_EVENTID_UARTINT0);
+	}
+	else if (num == 1)
+	{
+		// Map UART1 system interrupts to DSP INT4
+		CSL_FINS(dspintcRegs->INTMUX1, DSPINTC_INTMUX1_INTSEL4, CSL_INTC_EVENTID_UARTINT1);
+	}
+	else if (num == 2)
+	{
+		// Map UART2 system interrupts to DSP INT4
+		CSL_FINS(dspintcRegs->INTMUX1, DSPINTC_INTMUX1_INTSEL4, CSL_INTC_EVENTID_UARTINT2);
+	}
+	else return;
+
+	// Assign the address of the IST to the IST pointer
+	ISTP = (unsigned int)intcVectorTable;
+
+	// Clear all CPU maskable interrupts
+	ICR = DSPINTC_IST_ALL_MASK_INT;
+
+	// Enable INT4 interrupts
+	IER = DSPINTC_IST_NMI | DSPINTC_IST_INT4;
+}/* setup_DSP_INTC */
+
+/*---------------------------------------------------------------------------*/
+
+static void uart_enable ()
+{
+	// Enable UART Receiver/Transmitter
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_URRST, ENABLE);
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_UTRST, ENABLE);
+}/* uart_enable */
+
+/*---------------------------------------------------------------------------*/
+
+static void UART_interrupt_loopback_DSPexample ()
+{
+	printf("Example: UART_interrupt_loopback_dspL138\n"
+		   "Scope: UART peripheral performs a simple "
+		   "loopback test illustrating UART initialization "
+		   "with interrupts.\n"
+		   "Begin...\n");
+
+	transmitterFull = FALSE;
+	dataUnavailable = TRUE;
+
+	// Intrinsic Function to Enable Interrupts
+	_enable_interrupts();
+
+	// Enable UART Receiver/Transmitter
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_URRST, ENABLE);
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_UTRST, ENABLE);
+
+	// Transmit/Receive String in Loopback Mode
+	for(counter = 0; counter < maxCHARS; counter++)
+	{
+		//UART_sendData(transmitData[counter]);
+		//receiveData[counter] = UART_receiveData();
+
+		while(transmitterFull);
+		// Reset Bool Variable
+		transmitterFull = TRUE;
+		// Send Data to Transmitter Buffer
+		CSL_FINS(uartRegs->THR, UART_THR_DATA, transmitData[counter]);
+
+		while(dataUnavailable);
+		// Reset Bool Variable
+		dataUnavailable = TRUE;
+
+		// Process Data in Receiver Buffer
+		receiveData[counter] = CSL_FEXT(uartRegs->RBR, UART_RBR_DATA);
+	}
+
+	// Disable UART Receiver/Transmitter
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_URRST, RESET);
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_UTRST, RESET);
+
+	// Intrinsic Function to Disable Interrupts
+	_disable_interrupts();
+
+	// Ensure UART Module Functionality
+	for(counter = 0; counter < maxCHARS; counter++)
+	{
+		printf("\tTransmit: %c  Receive: %c\n",
+			transmitData[counter], receiveData[counter]);
+		if(transmitData[counter] != receiveData[counter])
+			counter = maxCHARS + 1;
+	}
+
+	if(counter > maxCHARS)
+		printf("\tError occured during UART transmit/receive process.\n");
+
+	printf("End of example.\n\n");
+}/* UART_interrupt_loopback_DSPexample */
+
+static void UART_interrupt_loopback_DSPexample2 ()
+{
+	volatile long int k, p;
+	for (k = 0; k < 1000; k++)
+	{
+		in_arr[k] = 0;
+	}
+
+
+	printf("Example: UART_interrupt_loopback_dspL138\n"
+		   "Scope: UART peripheral performs a simple "
+		   "loopback test illustrating UART initialization "
+		   "with interrupts.\n"
+		   "Begin...\n");
+
+	transmitterFull = FALSE;
+	dataUnavailable = TRUE;
+
+	// Intrinsic Function to Enable Interrupts
+	_enable_interrupts();
+
+	// Enable UART Receiver/Transmitter
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_URRST, ENABLE);
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_UTRST, ENABLE);
+/*
+	// Transmit/Receive String in Loopback Mode
+	for(counter = 0; counter < maxCHARS; counter++)
+	{
+		//UART_sendData(transmitData[counter]);
+		//receiveData[counter] = UART_receiveData();
+
+		while(transmitterFull);
+		// Reset Bool Variable
+		transmitterFull = TRUE;
+		// Send Data to Transmitter Buffer
+		CSL_FINS(uartRegs->THR, UART_THR_DATA, transmitData[counter]);
+
+		while(dataUnavailable);
+		// Reset Bool Variable
+		dataUnavailable = TRUE;
+
+		// Process Data in Receiver Buffer
+		receiveData[counter] = CSL_FEXT(uartRegs->RBR, UART_RBR_DATA);
+	}
+*/
+	while(1)
+	{
+		for (k = 0; k < 9; k++)
+		{
+			while (CSL_FEXT(uartRegs->LSR, UART_LSR_THRE) != CSL_UART_LSR_THRE_EMPTY);
+			CSL_FINS(uartRegs->THR, UART_THR_DATA, 0x30+k);
+		}
+		;
+		for (k = 0; k < 300000; k++)
+		{
+			p = sqrt(k);
+		}
+
+	}
+
+	// Disable UART Receiver/Transmitter
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_URRST, RESET);
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_UTRST, RESET);
+
+	// Intrinsic Function to Disable Interrupts
+	_disable_interrupts();
+
+	// Ensure UART Module Functionality
+	for(counter = 0; counter < maxCHARS; counter++)
+	{
+		printf("\tTransmit: %c  Receive: %c\n",
+			transmitData[counter], receiveData[counter]);
+		if(transmitData[counter] != receiveData[counter])
+			counter = maxCHARS + 1;
+	}
+
+	if(counter > maxCHARS)
+		printf("\tError occured during UART transmit/receive process.\n");
+
+	printf("End of example.\n\n");
+}/* UART_interrupt_loopback_DSPexample */
+
+
+static void UART_UPP_sender ()
+{
+	volatile long int k, p;
+	proger_stop();
+
+	//while( UART_command_start == 0 );
+	UART_command_start = 0;
+
+	//main_proger_wr_pulseprog();
+	main_proger_wr_pulseprog_test_FRQ();
+	//main_proger_wr_pulseprog_test_STOP_COM();
+
+	uppFull = FALSE;
+	upp_start (byte_count, line_count, in_upp_arr);
+	proger_start();
+	while(!uppFull);
+	printf("UPP EOW OK!  # \t%d.\n", upp_isr_count);
+	proger_stop();
+
+		for (k = 0; k < byte_count; k = k + 2)
+		{
+			dummyDelay(400);
+			while (CSL_FEXT(uartRegs->LSR, UART_LSR_THRE) != CSL_UART_LSR_THRE_EMPTY);
+			if (k==0)
+			{
+				p =  in_upp_arr[k] + (in_upp_arr[k+1] << 8);
+				//CSL_FINS(uartRegs->THR, UART_THR_DATA, in_upp_arr[k]);
+				//CSL_FINS(uartRegs->THR, UART_THR_DATA, in_upp_arr[k+1]);
+				break;
+			}
+		}
+		;
+		//for (k = 0; k < 300000; k++)
+		//{
+		//	p = sqrt(k);
+		//}
+
+		//dummyDelay(8000);
+}/* UART_UPP_sender */
+
+void UART_COM_STOP_TEST ()
+{
+	volatile long int k, p;
+
+	while( UART_command_start == 0 );
+
+	UART_command_start = 0;
+	proger_stop();
+	main_proger_wr_pulseprog_test_STOP_COM();
+
+	proger_start();
+	printf("PROGER STARTED OK!  # \t%d.\n", upp_isr_count);
+
+}/* UART_COM_STOP_TEST */
+
+void UART_COM_241_TEST ()
+{
+	volatile long int k, p;
+
+	while( UART_command_start == 0 );
+
+	UART_command_start = 0;
+	proger_stop();
+	main_proger_wr_pulseprog_test_241_len();
+
+	proger_start();
+	printf("PROGER STARTED OK!  # \t%d.\n", upp_isr_count);
+
+}/* UART_COM_241_TEST */
+
+void UART_COM_CYCLES_TEST ()
+{
+	volatile long int k, p;
+
+	while( UART_command_start == 0 );
+
+	UART_command_start = 0;
+	proger_stop();
+	main_proger_wr_pulseprog_test_cycles();
+
+	proger_start();
+	printf("PROGER STARTED OK!  # \t%d.\n", upp_isr_count);
+
+}/* UART_COM_CYCLES_TEST */
+
+void UART_COM_CP_TEST ()
+{
+	volatile long int k, p;
+
+	while( UART_command_start == 0 );
+
+	UART_command_start = 0;
+	proger_stop();
+	main_proger_wr_pulseprog_test_cp();
+
+	proger_start();
+	printf("PROGER STARTED OK!  # \t%d.\n", upp_isr_count);
+
+}/* UART_COM_CP_TEST */
+
+static int test_proger_rd_acquisition_info ()
+{
+	unsigned char data [1024];
+	unsigned int k;
+
+	proger_start();
+	dummyDelay(100);
+	proger_stop();
+
+	for (k = 0; k < byte_count; k++)
+	{
+		data[k] = 0;
+	}
+
+	proger_rd_acquisition_info (data, 1024);
+
+	for (k = 0; k < byte_count; k++)
+	{
+		printf("ACQ ARRAY # \t%d, = \t%d\n", k, data[k]);
+	}
+
+	dummyDelay(8000);
+}/* test_proger_rd_acquisition_info */
+
+static int main_proger_test_mem_pulseprog ()
+{
+	//unsigned char array [PROGER_SIZE_IN_BYTES], array_prog [PROGER_SIZE_IN_BYTES];
+	unsigned int k, result;
+
+	for (k = 0; k < PROGER_SIZE_IN_BYTES; k++)
+	{
+		array[k] = k+1;
+	}
+
+	proger_wr_pulseprog (array,			PROGER_SIZE_IN_BYTES);
+
+	proger_rd_pulseprog (array_prog,	PROGER_SIZE_IN_BYTES);
+
+	result = 1;
+
+	for (k = 0; k < PROGER_SIZE_IN_BYTES; k++)
+	{
+		//printf("BYTE # \t%d, = \t%d\n", k, array_prog[k]);
+		if (array_prog[k] != array[k])
+		{
+			result = 0;
+			break;
+		}
+	}
+
+	proger_mem_init ();
+
+	if (result == 1)
+		;//printf("Programmator pulse prog memory OK\n");
+	else
+		;//printf("ERROR Programmator pulse prog memory OK\n");
+
+	dummyDelay(8000);
+}/* test_proger_rd_acquisition_info */
+
+
+static int main_proger_wr_pulseprog ()
+{
+	//unsigned char array [PROGER_SIZE_IN_BYTES], array_prog [PROGER_SIZE_IN_BYTES];
+	unsigned int k, result;
+	unsigned char array[PROGER_SIZE_IN_BYTES] = {
+
+			241	,
+			0	,
+			0	,
+			0	,
+
+			241	,
+			0	,
+			0	,
+			15	,
+
+			242	,
+			0	,
+			0	,
+			1	,
+
+			241	,
+			0	,
+			0	,
+			30	,
+
+			242	,
+			0	,
+			0	,
+			0	,
+
+
+
+			231	,
+			0	,
+			0	,
+			30	,
+
+			220	,
+			0	,
+			0	,
+			1	,
+
+			221	,
+			0	,
+			0	,
+			2	,
+
+			221	,
+			0	,
+			0	,
+			3	,
+
+			221	,
+			0	,
+			0	,
+			4	,
+
+			221	,
+			0	,
+			0	,
+			5	,
+
+			243	,
+			255	,
+			255	,
+			255	,
+
+			241	,
+			255	,
+			255	,
+			255	,
+
+			244	,
+			0	,
+			0	,
+			0	,
+
+	};
+
+
+	proger_stop ();
+	proger_mem_init ();
+
+	proger_wr_pulseprog (array, 64);
+
+}/* main_proger_wr_pulseprog */
+
+static int main_proger_wr_pulseprog_test_GPIO ()
+{
+	//unsigned char array [PROGER_SIZE_IN_BYTES], array_prog [PROGER_SIZE_IN_BYTES];
+	unsigned int k, result;
+	unsigned char array[PROGER_SIZE_IN_BYTES] = {
+
+			241	,
+			0	,
+			0	,
+			0	,
+
+			241	,
+			0	,
+			0	,
+			15	,
+
+			242	,
+			0	,
+			0	,
+			1	,
+
+			241	,
+			0	,
+			0	,
+			4	,
+
+			242	,
+			0	,
+			0	,
+			0	,
+
+
+
+			231	,
+			0	,
+			0	,
+			200	,
+
+			220	,
+			0	,
+			0	,
+			1	,
+
+			221	,
+			0	,
+			0	,
+			2	,
+
+			221	,
+			0	,
+			0	,
+			3	,
+
+			221	,
+			0	,
+			0	,
+			4	,
+
+			221	,
+			0	,
+			0	,
+			5	,
+
+			243	,
+			255	,
+			255	,
+			255	,
+
+			241	,
+			255	,
+			255	,
+			255	,
+
+			244	,
+			0	,
+			0	,
+			0	,
+
+	};
+
+
+	proger_stop ();
+	//proger_mem_init ();
+
+	proger_wr_pulseprog (array, 14*4);
+
+}/* main_proger_wr_pulseprog_test_GPIO */
+
+static int main_proger_wr_pulseprog_test_GPIO2 ()
+{
+	//unsigned char array [PROGER_SIZE_IN_BYTES], array_prog [PROGER_SIZE_IN_BYTES];
+	unsigned int k, result;
+	unsigned char array[PROGER_SIZE_IN_BYTES] = {
+
+			241	,	0	,	0	,	1	,
+
+				210	,	0x00,	0x00,	0x10,
+
+			241	,	0	,	0	,	9	, // duration of GPIO pulse
+
+				231	,	0	,	0	,	200	,	//RF pulse 20 mks
+
+				210	,	0x00,	0x00,	0x14,//WR output reg 1's in GPIO[0] and GPIO[5].
+
+				243	,	0	,	0	,	4	,
+
+			241	,	0	,	0	,	19	,
+
+				242	,	0	,	0	,	1	,
+
+			241	,	0	,	0	,	19	,
+
+				242	,	0	,	0	,	0	,
+
+				244	,	0	,	0	,	0	,
+
+			241	,	0	,	0	,	19	,
+
+				210	, //WR output reg all 0's.
+				0x00,
+				0x00,
+				0x10,
+
+				243	,
+				255	,
+				255	,
+				255	,
+
+			241	,
+			255	,
+			255	,
+			255	,
+
+				244	,
+				0	,
+				0	,
+				0	,
+
+				0	,
+				0	,
+				0	,
+				0	,
+
+	};
+
+
+	proger_stop ();
+	//proger_mem_init ();
+
+	proger_wr_pulseprog (array, 16*4);
+
+}/* main_proger_wr_pulseprog_test_GPIO2 */
+
+static int main_proger_wr_pulseprog_test_GPIO3 ()
+{
+	//unsigned char array [PROGER_SIZE_IN_BYTES], array_prog [PROGER_SIZE_IN_BYTES];
+	unsigned int k, result;
+	unsigned char array[PROGER_SIZE_IN_BYTES] = {
+
+			241	,	0	,	0x27	,	0x0F	, // 10 ms delay before RF pulses
+
+				210	,	0x00,	0x00,	0x10 | 0x08,	//out reg 4 goes high - awake led lights up //GPIO3 goes low - rf pulses started
+
+
+			241	,	0	,	0	,	9	, // duration of GPIO pulse
+
+			//	231	,	0	,	0	,	200	, //RF pulse 20 mks
+
+				210	,	0x00,	0x00,	0x10 | 0x08 | 0x04, //GPIO2 goes low - adc window started
+
+				243	,	0	,	0x01,	0x2B, // ecos number = 300
+
+			241	,	0	,	0x01	,	0xC1, // delay 450 mks
+
+			241	,	0	,	0	,	99	,	 // adc time 100 mks
+
+				242	,	0	,	0	,	1	,
+
+			241	,	0	,	0x01	,	0xC1, // delay 450 mks
+
+				242	,	0	,	0	,	0	, // adc off
+
+				244	,	0	,	0	,	0	, // end of cycles
+
+			241	,	0	,	0x27	,	0x0F	, // 10 ms delay after RF pulses
+
+				210	,	0x00	,	0x00	,	0x10  | 0x08,	//GPIO2 goes high - adc window ended
+
+			241	,	0	,	0	,	9	,
+
+				210	,	0x00,	0x00,	0x00, //GPIO3 goes high -  RF pulses ended, awake led off
+
+			241	,	0	,	0	,	19	,	// last delay
+
+				243	,
+				0	,
+				0	,
+				0	,
+
+			241,	0x0F,	0x42,	0x3F,
+
+				244	,
+				0	,
+				0	,
+				0	,
+
+				0	,
+				0	,
+				0	,
+				0	,
+
+	};
+
+
+	proger_stop ();
+	//proger_mem_init ();
+
+	proger_wr_pulseprog (array, 23*4);
+
+}/* main_proger_wr_pulseprog_test_GPIO3 */
+
+static int main_proger_wr_pulseprog_test_GPIO4 ()
+{
+	//unsigned char array [PROGER_SIZE_IN_BYTES], array_prog [PROGER_SIZE_IN_BYTES];
+	unsigned int k, result;
+	unsigned char array[PROGER_SIZE_IN_BYTES] = {
+
+			241	,	0	,	0x27	,	0x0F	, // 10 ms delay before RF pulses
+
+				210	,	0x00,	0x00,	0x10 | 0x08,	//out reg 4 goes high - awake led lights up //GPIO3 goes low - rf pulses started
+
+
+			241	,	0	,	0	,	9	, // duration of GPIO pulse
+
+			//	231	,	0	,	0	,	200	, //RF pulse 20 mks
+
+				210	,	0x00,	0x00,	0x10 | 0x08 | 0x04, //GPIO2 goes low - adc window started
+
+				243	,	0	,	0x01,	0x2B, // ecos number = 300
+
+			241	,	0	,	0x01	,	0xC1, // delay 450 mks
+
+			241	,	0	,	0	,	99	,	 // adc time 100 mks
+
+				242	,	0	,	0	,	1	,
+
+				220	,	2	,	1	,	0	,
+
+				221	,	5	,	4	,	3	,
+
+				220	,	8	,	7	,	6	,
+
+				220	,	11	,	10	,	9	,
+
+				220	,	14	,	13	,	12	,
+
+			241	,	0	,	0x01	,	0xC1, // delay 450 mks
+
+				242	,	0	,	0	,	0	, // adc off
+
+				244	,	0	,	0	,	0	, // end of cycles
+
+			241	,	0	,	0x27	,	0x0F	, // 10 ms delay after RF pulses
+
+				210	,	0x00	,	0x00	,	0x10  | 0x08,	//GPIO2 goes high - adc window ended
+
+			241	,	0	,	0	,	9	,
+
+				210	,	0x00,	0x00,	0x00, //GPIO3 goes high -  RF pulses ended, awake led off
+
+			241	,	0	,	0	,	19	,	// last delay
+
+				243	,
+				0	,
+				0	,
+				0	,
+
+			241,	0x0F,	0x42,	0x3F,
+
+				244	,
+				0	,
+				0	,
+				0	,
+
+				0	,
+				0	,
+				0	,
+				0	,
+
+	};
+
+
+	proger_stop ();
+	//proger_mem_init ();
+
+	proger_wr_pulseprog (array, 23*4);
+
+}/* main_proger_wr_pulseprog_test_GPIO4 */
+
+static int main_proger_wr_pulseprog_test_GPIO5 ()
+{
+	//unsigned char array [PROGER_SIZE_IN_BYTES], array_prog [PROGER_SIZE_IN_BYTES];
+	unsigned int k, result;
+	unsigned char array[PROGER_SIZE_IN_BYTES] = {
+
+			241	,	0	,	0	,	0	,
+
+				253	,	0	,	0	,	0x03	,
+
+			241	,	0	,	0	,	1	,
+
+				231	,	0	,	0	,	5	, //RF pulse 20 mks
+
+				254	,	0	,	0	,	0	,
+
+			241	,	0	,	0	,	1	,
+
+				231	,	0	,	0	,	10	, //RF pulse 20 mks
+
+			241	,	0	,	0	,	99	,	 // adc time 100 mks
+
+				242	,	0	,	0	,	1	,
+
+				220	,	2	,	1	,	0	,
+
+				221	,	5	,	4	,	3	,
+
+				220	,	8	,	7	,	6	,
+
+				220	,	11	,	10	,	9	,
+
+				220	,	14	,	13	,	12	,
+
+			241	,	0	,	0x01	,	0xC1, // delay 450 mks
+
+				242	,	0	,	0	,	0	, // adc off
+
+				244	,	0	,	0	,	0	, // end of cycles
+
+			241	,	0	,	0x27	,	0x0F	, // 10 ms delay after RF pulses
+
+				210	,	0x00	,	0x00	,	0x10  | 0x08,	//GPIO2 goes high - adc window ended
+
+			241	,	0	,	0	,	9	,
+
+				210	,	0x00,	0x00,	0x00, //GPIO3 goes high -  RF pulses ended, awake led off
+
+			241	,	0	,	0	,	19	,	// last delay
+
+				243	,
+				0	,
+				0	,
+				0	,
+
+			241,	0x0F,	0x42,	0x3F,
+
+				244	,
+				0	,
+				0	,
+				0	,
+
+				0	,
+				0	,
+				0	,
+				0	,
+
+	};
+
+
+	proger_stop ();
+	//proger_mem_init ();
+
+	proger_wr_pulseprog (array, 23*4);
+
+}/* main_proger_wr_pulseprog_test_GPIO5 */
+
+static int main_proger_wr_pulseprog_test_GPIO6 ()
+{
+	//unsigned char array [PROGER_SIZE_IN_BYTES], array_prog [PROGER_SIZE_IN_BYTES];
+	unsigned int k, result;
+
+	unsigned char array[PROGER_SIZE_IN_BYTES] = {
+
+			241	,	0	,	0	,	2	,
+
+				250	,	0	,	0	,	0x00	,//counter instead of adc
+
+				//220	,	0x1A	,	0x36	,	0xE2	,//OFS01 100 kHz / 250MHz
+
+				220	,	0xE5	,	0xC9	,	0x1E	,//OFS01 -100 kHz / 250MHz
+
+				253	,	0	,	0	,	0x02	,
+
+				253	,	0	,	0	,	0x03	,
+
+			241	,	0	,	0	,	1	,
+
+				231	,	0	,	0	,	5	, //RF pulse 20 mks
+
+				254	,	0	,	0	,	0	,
+
+				254	,	0	,	0	,	0	,
+
+			241	,	0	,	0	,	1	,
+
+				231	,	0	,	0	,	10	, //RF pulse 20 mks
+
+			241	,	0	,	0	,	99	,	 // adc time 100 mks
+
+				242	,	0	,	0	,	1	,
+
+				220	,	2	,	1	,	0	,
+
+				221	,	5	,	4	,	3	,
+
+				220	,	8	,	7	,	6	,
+
+				220	,	11	,	10	,	9	,
+
+				220	,	14	,	13	,	12	,
+
+			241	,	0	,	0x01	,	0xC1, // delay 450 mks
+
+				242	,	0	,	0	,	0	, // adc off
+
+				244	,	0	,	0	,	0	, // end of cycles
+
+			241	,	0	,	0x27	,	0x0F	, // 10 ms delay after RF pulses
+
+				210	,	0x00	,	0x00	,	0x10  | 0x08,	//GPIO2 goes high - adc window ended
+
+			241	,	0	,	0	,	9	,
+
+				210	,	0x00,	0x00,	0x00, //GPIO3 goes high -  RF pulses ended, awake led off
+
+			241	,	0	,	0	,	19	,	// last delay
+
+				243	,
+				0	,
+				0	,
+				0	,
+
+			241,	0x0F,	0x42,	0x3F,
+
+				244	,
+				0	,
+				0	,
+				0	,
+
+				0	,
+				0	,
+				0	,
+				0	,
+
+	};
+
+
+	proger_stop ();
+	//proger_mem_init ();
+
+	proger_wr_pulseprog (array, 30*4);
+
+}/* main_proger_wr_pulseprog_test_GPIO6 */
+
+static int main_proger_wr_pulseprog_test_RET_COM ()
+{
+	//unsigned char array [PROGER_SIZE_IN_BYTES], array_prog [PROGER_SIZE_IN_BYTES];
+	unsigned int k, result;
+
+	unsigned char array[PROGER_SIZE_IN_BYTES] = {
+
+			241	,	0	,	0	,	1	,
+
+				231	,	0	,	0	,	255	, //RF pulse 5 mks
+
+				200	,	0x00,	0x00,	0x00, //GPIO3 goes high -  RF pulses ended, awake led off
+
+			241,	0x0F,	0x42,	0x3F, //1 s
+
+				200	,	0x00	,	0x00	,	0x10,
+
+			241,	0x0F,	0x42,	0x3F, //1 s
+
+				200	,	0x00	,	0x00	,	0x00,
+
+			241,	0x00,	0x00,	0x01, //2 mks
+
+				//255,	0x00,	0x00,	0x00, //STOP
+
+				0,		0x00,	0x00,	0x00, //RET
+	};
+
+
+	proger_stop ();
+	//proger_mem_init ();
+
+	proger_wr_pulseprog (array, 9*4);
+
+}/* main_proger_wr_pulseprog_test_RET_COM */
+
+static int main_proger_wr_pulseprog_test_STOP_COM ()
+{
+	//unsigned char array [PROGER_SIZE_IN_BYTES], array_prog [PROGER_SIZE_IN_BYTES];
+	unsigned int k, result;
+
+	unsigned char array[PROGER_SIZE_IN_BYTES] = {
+
+			241	,	0	,	0	,	1	,
+
+				231	,	0	,	0	,	255	, //RF pulse 5 mks
+
+				200	,	0x00,	0x00,	0x00, //GPIO3 goes high -  RF pulses ended, awake led off
+
+			241,	0x0F,	0x42,	0x3F, //1 s
+
+				200	,	0x00	,	0x00	,	0x10,
+
+			241,	0x0F,	0x42,	0x3F, //1 s
+
+				200	,	0x00	,	0x00	,	0x00,
+
+			241,	0x00,	0x00,	0x01, //2 mks
+
+				255,	0x00,	0x00,	0x00, //STOP
+
+				0,		0x00,	0x00,	0x00, //RET
+	};
+
+
+	proger_stop ();
+	//proger_mem_init ();
+
+	proger_wr_pulseprog (array, 10*4);
+
+}/* main_proger_wr_pulseprog_test_STOP_COM */
+
+static int main_proger_wr_pulseprog_test_241_len ()
+{
+	//unsigned char array [PROGER_SIZE_IN_BYTES], array_prog [PROGER_SIZE_IN_BYTES];
+	unsigned int k, result;
+
+	unsigned char array[PROGER_SIZE_IN_BYTES] = {
+
+			241	,	0	,	0	,	1	,
+
+				231	,	0	,	0	,	10	, //RF pulse 5 mks
+
+				200	,	0x00,	0x00,	0x00, //GPIO3 goes high -  RF pulses ended, awake led off
+
+			241,	0,	0,	0, //1 s
+
+				200	,	0x00	,	0x00	,	0x10,
+
+			241,	0x0F,	0x42,	0x3F, //1 s
+
+				200	,	0x00	,	0x00	,	0x00,
+
+			241,	0x00,	0x00,	0x01, //2 mks
+
+				255,	0x00,	0x00,	0x00, //STOP
+
+				0,		0x00,	0x00,	0x00, //RET
+	};
+
+
+	proger_stop ();
+	//proger_mem_init ();
+
+	proger_wr_pulseprog (array, 10*4);
+
+}/*main_proger_wr_pulseprog_test_241_len */
+
+static int main_proger_wr_pulseprog_test_cycles ()
+{
+	//unsigned char array [PROGER_SIZE_IN_BYTES], array_prog [PROGER_SIZE_IN_BYTES];
+	unsigned int k, result;
+
+	unsigned char array[PROGER_SIZE_IN_BYTES] = {
+
+			241	,	0	,	0	,	1	,
+
+				243	,	0	,	0	,	0x02	,
+
+				243	,	0	,	0	,	0x03	,
+
+			241	,	0	,	0	,	1	,
+
+				231	,	0	,	0	,	5	, //RF pulse 20 mks
+
+				244	,	0	,	0	,	0	,
+
+				244	,	0	,	0	,	0	,
+
+			241	,	0	,	0	,	1	,
+
+				//231	,	0	,	0	,	10	, //RF pulse 20 mks
+
+			241	,	0	,	0	,	99	,	 // adc time 100 mks
+
+	};
+
+
+	proger_stop ();
+	//proger_mem_init ();
+
+	proger_wr_pulseprog (array, 9*4);
+
+}/*main_proger_wr_pulseprog_test_cycles */
+
+static int main_proger_wr_pulseprog_test_cp ()
+{
+	//unsigned char array [PROGER_SIZE_IN_BYTES], array_prog [PROGER_SIZE_IN_BYTES];
+	unsigned int k, result;
+
+	unsigned char array[PROGER_SIZE_IN_BYTES] = {
+
+			241	,	0	,	0	,	1	,
+
+				243	,	0	,	0	,	0x02	,
+
+				243	,	0	,	0	,	0x03	,
+
+				//253	,	0	,	0	,	0x05	,
+
+			241	,	0	,	0x27	,	0x0F	,
+
+				231	,	0	,	0xC3	,	0x50	, //RF pulse 20 mks
+
+				244	,	0	,	0	,	0	,
+
+				244	,	0	,	0	,	0	,
+
+				//254	,	0	,	0	,	0	,
+
+			//241	,	0	,	0	,	1	,
+
+				//231	,	0	,	0	,	10	, //RF pulse 20 mks
+
+			//241	,	0	,	0	,	99-16	,	 // adc time 100 mks
+
+			0, 0 , 0, 0,
+
+	};
+
+
+	proger_stop ();
+	proger_mem_init ();
+
+	proger_wr_pulseprog (array, 8*4);
+
+}/*main_proger_wr_pulseprog_test_cp */
+
+static int main_proger_wr_pulseprog_test_FRQ ()
+{
+	//unsigned char array [PROGER_SIZE_IN_BYTES], array_prog [PROGER_SIZE_IN_BYTES];
+	unsigned int k, result;
+
+	unsigned char array[PROGER_SIZE_IN_BYTES];
+	//memset(array, 0x00, PROGER_SIZE_IN_BYTES);
+	proger_stop ();
+	proger_mem_init();
+	proger_reset_comm_fifo_counter();
+
+	proger_wr_comm_to_fifo ( COM_TIME, 0, 0, 2);
+		proger_wr_comm_to_fifo ( COM_PROC_CONTROL_REG, 0, 0, 0x80); // Busy led on
+		proger_wr_comm_to_fifo ( COM_TEST_CONF_WR, 0, 0, 0);
+		proger_wr_comm_to_fifo ( COM_OFS01, 0x1A, 0x36, 0xE2);
+		//proger_wr_comm_to_fifo ( COM_OFS01, 0xE5, 0xC9, 0x1E);
+		proger_wr_comm_to_fifo ( COM_CYCLE_OPEN, 0, 0, 2);
+		proger_wr_comm_to_fifo ( COM_CYCLE_OPEN, 0, 0, 3);
+	proger_wr_comm_to_fifo ( COM_TIME, 0, 0, 1);
+		proger_wr_comm_to_fifo ( COM_RF01, 0, 0, 5);
+		proger_wr_comm_to_fifo ( COM_CYCLE_CLOSE, 0, 0, 0);
+		proger_wr_comm_to_fifo ( COM_CYCLE_CLOSE, 0, 0, 0);
+	proger_wr_comm_to_fifo ( COM_TIME, 0, 0, 1);
+		proger_wr_comm_to_fifo ( COM_RF01, 0, 0, 10);
+	proger_wr_comm_to_fifo ( COM_TIME, 0, 0, 99);
+		proger_wr_comm_to_fifo ( COM_ADS_IN, 0, 0, 1);
+		proger_wr_comm_to_fifo ( COM_WR_RST_PROC_MEM, 2, 1, 0);
+		proger_wr_comm_to_fifo ( COM_WR_INC_PROC_MEM, 5, 4, 3);
+		proger_wr_comm_to_fifo ( COM_WR_INC_PROC_MEM, 8, 7, 6);
+		proger_wr_comm_to_fifo ( COM_WR_INC_PROC_MEM, 11, 10, 9);
+		proger_wr_comm_to_fifo ( COM_WR_INC_PROC_MEM, 14, 13, 12);
+	proger_wr_comm_to_fifo ( COM_TIME, 0, 0x01, 0xC1);// time interval 450 mks
+		proger_wr_comm_to_fifo ( COM_ADS_IN, 0, 0, 0);
+	proger_wr_comm_to_fifo ( COM_TIME, 0, 0x01, 0xC1);// time interval 10 ms for delay after RF pulses
+		proger_wr_comm_to_fifo ( COM_PROC_CONTROL_REG, 0, 0, 0x00); // Busy led off
+	proger_wr_comm_to_fifo ( COM_TIME, 0x0F, 0x42, 0x3F); // last delay
+	proger_wr_comm_to_fifo ( COM_TIME, 0x00, 0x00, 0x01);
+		proger_wr_comm_to_fifo ( COM_RET, 0x0F, 0x42, 0x3F); // last delay
+
+}/* main_proger_wr_pulseprog_test_FRQ */
+
+/*-----------------------------------------------------------------------------
+ *
+ * 							Interrupt Functions
+ *
+ *---------------------------------------------------------------------------*/
+interrupt void UART_isr (void)
+{
+	char ch=0xFF, k;
+
+	// Determine Prioritized Pending UART Interrupt
+	prioritizedINT = CSL_FEXT(uartRegs->IIR, UART_IIR_INTID);
+
+	// Set Appropriate Bool
+	if(prioritizedINT == UART_REC_BUF_FULL_INT)
+	{
+		dataUnavailable = FALSE;
+		ch = CSL_FEXT(uartRegs->RBR, UART_RBR_DATA);
+
+		if (ch == UART_COMM_START)
+			UART_command_start = 1;
+
+		//in_arr[in_cnt++] = ch;
+		static int counter = 0;
+		//counter++;
+
+		RS485_sendchar(ch);
+		RS485_sendchar(++ch);
+		RS485_sendchar(++ch);
+
+		if (in_cnt < 1000)//10 in_cnt >= 1
+		{
+			in_arr[in_cnt++] = ch;
+			counter++;
+
+			for (k = 0; k <= 0/*9*/; k++)
+			{
+				//while (CSL_FEXT(uartRegs->LSR, UART_LSR_THRE) != CSL_UART_LSR_THRE_EMPTY);
+				//CSL_FINS(uartRegs->THR, UART_THR_DATA, in_arr[k]);
+
+				//RS485_sendchar(ch);
+
+			}
+			//in_cnt = 0;
+		}
+		else
+		{
+			in_cnt = in_cnt;
+		}
+
+
+	}
+	else if(prioritizedINT == UART_TRAN_BUF_EMPTY_INT)
+		transmitterFull = FALSE;
+
+	//char ch = UART_receiveData();
+	//UART_sendData(ch);
+
+
+
+	//CSL_FINS(uartRegs->THR, UART_THR_DATA, ch);
+}
+
+interrupt void upp_isr (void)
+{
+	//uppFull = TRUE;
+
+	upp_isr_count++;
+//	printf("\tUPP ISR OK!  # \t%d.", ++upp_isr_count);
+
+	// Determine Pending Interrupt
+	upp_int_status = UPP0Regs->UPISR;
+
+	if( (upp_int_status & CSL_UPP_UPISR_EOWI_MASK) == (1 << CSL_UPP_UPISR_EOWI_SHIFT) )
+	{
+//		printf("\tEOW chA");
+		CSL_FINST(UPP0Regs->UPIER, UPP_UPIER_EOWI, TRUE);// clear int-t flag
+		//uppFull = TRUE;
+	};
+
+	if( (upp_int_status & CSL_UPP_UPISR_EOLI_MASK) == (1 << CSL_UPP_UPISR_EOLI_SHIFT) )
+	{
+		//printf("\tEOL chA");
+		CSL_FINST(UPP0Regs->UPIER, UPP_UPIER_EOLI, TRUE);// clear int-t flag
+		uppFull = TRUE;
+	};
+//	printf("\n");
+}
+
+
+
+void UART0_TX_TEST ()
+{
+
+}
+
+void init_GPIO ()
+{
+
+	//PSCModuleControl(SOC_PSC_1_REGS, HW_PSC_GPIO, PSC_POWERDOMAIN_ALWAYS_ON, PSC_MDCTL_NEXT_ENABLE);	// initialization of GPIO support in PSC module
+	modulesEnabled = FALSE;
+
+	// Ensure previous initiated transitions have finished
+	if(check_psc_transition(CSL_PSC_1) == pscTimeout) return;
+
+	// Enable peripherals; Initiate transition
+	CSL_FINST(psc1Regs->MDCTL[CSL_PSC_GPIO], PSC_MDCTL_NEXT, ENABLE);
+	CSL_FINST(psc1Regs->PTCMD, PSC_PTCMD_GO0, SET);
+
+	// Ensure previous initiated transitions have finished
+	if(check_psc_transition(CSL_PSC_1) == pscTimeout) return;
+
+	// Ensure modules enabled
+	if(check_psc_MDSTAT(CSL_PSC_1, CSL_PSC_GPIO, CSL_PSC_MDSTAT_STATE_ENABLE) == pscTimeout) return;
+
+	modulesEnabled = TRUE;
+
+	CSL_FINST(sysRegs->PINMUX1, SYSCFG_PINMUX1_PINMUX1_31_28, GPIO0_0);
+	CSL_FINST(sysRegs->PINMUX1, SYSCFG_PINMUX1_PINMUX1_27_24, GPIO0_1);
+	CSL_FINST(sysRegs->PINMUX1, SYSCFG_PINMUX1_PINMUX1_23_20, GPIO0_2);
+	CSL_FINST(sysRegs->PINMUX1, SYSCFG_PINMUX1_PINMUX1_19_16, GPIO0_3);
+	CSL_FINST(sysRegs->PINMUX1, SYSCFG_PINMUX1_PINMUX1_15_12, GPIO0_4);
+	CSL_FINST(sysRegs->PINMUX1, SYSCFG_PINMUX1_PINMUX1_11_8, GPIO0_5);
+	CSL_FINST(sysRegs->PINMUX1, SYSCFG_PINMUX1_PINMUX1_7_4, GPIO0_6);
+	CSL_FINST(sysRegs->PINMUX1, SYSCFG_PINMUX1_PINMUX1_3_0, GPIO0_7);
+
+	CSL_FINST(sysRegs->PINMUX0, SYSCFG_PINMUX0_PINMUX0_31_28, GPIO0_8);
+	CSL_FINST(sysRegs->PINMUX0, SYSCFG_PINMUX0_PINMUX0_27_24, GPIO0_9);
+	CSL_FINST(sysRegs->PINMUX0, SYSCFG_PINMUX0_PINMUX0_23_20, GPIO0_10);
+	CSL_FINST(sysRegs->PINMUX0, SYSCFG_PINMUX0_PINMUX0_19_16, GPIO0_11);
+	CSL_FINST(sysRegs->PINMUX0, SYSCFG_PINMUX0_PINMUX0_15_12, GPIO0_12);
+	CSL_FINST(sysRegs->PINMUX0, SYSCFG_PINMUX0_PINMUX0_11_8, GPIO0_13);
+	CSL_FINST(sysRegs->PINMUX0, SYSCFG_PINMUX0_PINMUX0_7_4, GPIO0_14);
+	CSL_FINST(sysRegs->PINMUX0, SYSCFG_PINMUX0_PINMUX0_3_0, GPIO0_15);
+
+	CSL_FINS(gpioRegs->BANK[0].DIR,
+			GPIO_DIR_DIR13,
+			CSL_GPIO_DIR_DIR_OUT);
+	CSL_FINS(gpioRegs->BANK[0].DIR,
+			GPIO_DIR_DIR14,
+			CSL_GPIO_DIR_DIR_OUT);
+	CSL_FINS(gpioRegs->BANK[0].DIR,
+			GPIO_DIR_DIR15,
+			CSL_GPIO_DIR_DIR_OUT);
+
+	CSL_FINS(gpioRegs->BANK[0].DIR,	GPIO_DIR_DIR0, CSL_GPIO_DIR_DIR_IN);
+	CSL_FINS(gpioRegs->BANK[0].DIR,	GPIO_DIR_DIR1, CSL_GPIO_DIR_DIR_IN);
+	CSL_FINS(gpioRegs->BANK[0].DIR,	GPIO_DIR_DIR2, CSL_GPIO_DIR_DIR_IN);
+	CSL_FINS(gpioRegs->BANK[0].DIR,	GPIO_DIR_DIR3, CSL_GPIO_DIR_DIR_IN);
+	CSL_FINS(gpioRegs->BANK[0].DIR,	GPIO_DIR_DIR4, CSL_GPIO_DIR_DIR_IN);
+	CSL_FINS(gpioRegs->BANK[0].DIR,	GPIO_DIR_DIR5, CSL_GPIO_DIR_DIR_IN);
+	CSL_FINS(gpioRegs->BANK[0].DIR,	GPIO_DIR_DIR6, CSL_GPIO_DIR_DIR_IN);
+	CSL_FINS(gpioRegs->BANK[0].DIR,	GPIO_DIR_DIR7, CSL_GPIO_DIR_DIR_IN);
+	CSL_FINS(gpioRegs->BANK[0].DIR,	GPIO_DIR_DIR8, CSL_GPIO_DIR_DIR_IN);
+	CSL_FINS(gpioRegs->BANK[0].DIR,	GPIO_DIR_DIR9, CSL_GPIO_DIR_DIR_IN);
+	CSL_FINS(gpioRegs->BANK[0].DIR,	GPIO_DIR_DIR10, CSL_GPIO_DIR_DIR_IN);
+	CSL_FINS(gpioRegs->BANK[0].DIR,	GPIO_DIR_DIR11, CSL_GPIO_DIR_DIR_IN);
+	CSL_FINS(gpioRegs->BANK[0].DIR,	GPIO_DIR_DIR12, CSL_GPIO_DIR_DIR_IN);
+	CSL_FINS(gpioRegs->BANK[0].DIR,	GPIO_DIR_DIR13, CSL_GPIO_DIR_DIR_IN);
+
+
+	//CSL_FINS(gpioRegs->BANK->CLR_DATA, GPIO_CLR_DATA_CLR13, CSL_GPIO_CLR_DATA_CLR_CLR);//RX ON
+	//CSL_FINS(gpioRegs->BANK->CLR_DATA, GPIO_CLR_DATA_CLR14, CSL_GPIO_CLR_DATA_CLR_CLR);//TX OFF
+	//CSL_FINS(gpioRegs->BANK->SET_DATA, GPIO_SET_DATA_SET14, CSL_GPIO_SET_DATA_SET_SET);//TX ON
+}
+
+void enable_UART(CSL_UartRegsOvly uartRegs)
+{
+	// Enable UART Transmitter/Receiver
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_URRST, ENABLE);
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_UTRST, ENABLE);
+}
+
+
+void reset_UART(CSL_UartRegsOvly uartRegs)
+{
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_URRST, RESET);
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_UTRST, RESET);
+}
+
+
+void UART_RX_EN(CSL_UartRegsOvly uartRegs)
+{
+	// Enable UART Receiver
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_URRST, ENABLE);
+}
+
+void UART_TX_EN(CSL_UartRegsOvly uartRegs)
+{
+	// Enable UART Transmitter
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_UTRST, ENABLE);
+}
+
+void UART_RX_DIS(CSL_UartRegsOvly uartRegs)
+{
+	// Disable UART Receiver
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_URRST, RESET);
+}
+
+void UART_TX_DIS(CSL_UartRegsOvly uartRegs)
+{
+	// Disable UART Transmitter
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_UTRST, RESET);
+}
+
+void UART_RX_RST(CSL_UartRegsOvly uartRegs)
+{
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_URRST, RESET);
+}
+
+void UART_TX_RST(CSL_UartRegsOvly uartRegs)
+{
+	CSL_FINST(uartRegs->PWREMU_MGMT, UART_PWREMU_MGMT_UTRST, RESET);
+}
+
+void RS485_TX_ON()
+{
+	P14_SET();//TX ON
+}
+
+void RS485_TX_OFF()
+{
+	P14_CLR();//TX OFF
+}
+
+void RS485_RX_ON()
+{
+	P13_CLR();//RX ON
+}
+
+void RS485_RX_OFF()
+{
+	P13_SET();//RX OFF
+}
+
+void P13_CLR()
+{
+	CSL_FINS(gpioRegs->BANK[0].OUT_DATA, GPIO_OUT_DATA_OUT13, 0);
+}
+
+void P13_SET()
+{
+	CSL_FINS(gpioRegs->BANK[0].OUT_DATA, GPIO_OUT_DATA_OUT13, 1);
+}
+
+void P14_CLR()
+{
+	CSL_FINS(gpioRegs->BANK[0].OUT_DATA, GPIO_OUT_DATA_OUT14, 0);//RX ON
+}
+
+void P14_SET()
+{
+	CSL_FINS(gpioRegs->BANK[0].OUT_DATA, GPIO_OUT_DATA_OUT14, 1);//RX OFF
+}
+
+void P15_CLR()
+{
+	CSL_FINS(gpioRegs->BANK[0].OUT_DATA, GPIO_OUT_DATA_OUT15, 0);//HS ON
+}
+
+void P15_SET()
+{
+	CSL_FINS(gpioRegs->BANK[0].OUT_DATA, GPIO_OUT_DATA_OUT15, 1);//HS OFF
+}
+
+
+void test_GPIO ()
+{
+	while(1)
+	{
+		P13_CLR();
+		P14_CLR();
+
+		P13_SET();
+		P14_SET();
+
+		P13_CLR();
+		P14_CLR();
+
+
+		P14_SET();
+		P13_SET();
+
+		P14_CLR();
+		P13_CLR();
+	}
+}
+
+void init_RS485()
+{
+	RS485_TX_OFF();
+	RS485_RX_ON();
+}
+
+void RS485_sendchar(unsigned char ch)
+{
+	while (CSL_FEXT(uartRegs->LSR, UART_LSR_THRE) != CSL_UART_LSR_THRE_EMPTY);
+	while (CSL_FEXT(uartRegs->LSR, UART_LSR_THRE) != CSL_UART_LSR_TEMT_EMPTY);
+
+	UART_RX_DIS(uartRegs);
+//	RS485_RX_OFF();
+
+	RS485_TX_ON();
+	UART_TX_EN(uartRegs);
+
+	while (CSL_FEXT(uartRegs->LSR, UART_LSR_THRE) != CSL_UART_LSR_THRE_EMPTY);
+	while (CSL_FEXT(uartRegs->LSR, UART_LSR_TEMT) != CSL_UART_LSR_TEMT_EMPTY);
+
+	CSL_FINS(uartRegs->THR, UART_THR_DATA, ch);
+
+	if (CSL_FEXT(uartRegs->LSR, UART_LSR_THRE) != CSL_UART_LSR_THRE_EMPTY)
+	{
+		ch++;
+	}
+	if (CSL_FEXT(uartRegs->LSR, UART_LSR_THRE) != CSL_UART_LSR_TEMT_EMPTY)
+	{
+		ch++;
+	}
+	;
+	while (CSL_FEXT(uartRegs->LSR, UART_LSR_THRE) != CSL_UART_LSR_THRE_EMPTY);
+	while (CSL_FEXT(uartRegs->LSR, UART_LSR_TEMT) != CSL_UART_LSR_TEMT_EMPTY);
+	//dummyDelay(200);
+
+	RS485_TX_OFF();
+	UART_TX_DIS(uartRegs);
+
+
+	RS485_RX_ON();
+	UART_RX_EN(uartRegs);
+
+}
+
+void RS485_TX_TST_INFINITE()
+{
+	in_arr_clear();
+
+	while (1)
+	{
+		dummyDelay(4000);
+		RS485_sendchar(0x31);
+	}
+
+}
+
+void in_arr_clear()
+{
+	int k;
+	for (k = 0; k < 1000; k++)
+	{
+		in_arr[k] = 0x00;
+	}
+}
