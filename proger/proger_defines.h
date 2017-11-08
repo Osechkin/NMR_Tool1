@@ -98,6 +98,10 @@
 
 #define MEM_ADDR_DEVICE_SERIAL (PROGER_BASE_ADDR + 344)
 
+#define MEM_ADDR_STATUS_REG (PROGER_BASE_ADDR + 348)
+
+#define MEM_ADDR_DEVICE_CONN_SPD (PROGER_BASE_ADDR + 352)
+
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------

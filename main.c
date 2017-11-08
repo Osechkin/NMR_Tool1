@@ -26,6 +26,8 @@
 //#define DEBUG_TELEMETRIC
 //#define DEBUG_SPI
 //#define DEBUG_READCONF
+//#define DEBUG_READ_PROGER_STATUS
+//#define DEBUG_READ_PROGER_CONN_SPD
 
 //----------------------------------------------
 #include <stdio.h>
@@ -256,6 +258,8 @@ STACKPtrF *data_stack; 										// стек дл€ данных (массивов) типа float: data1
 float XX[XX_LEN]; 											// €чейки пам€ти X0, X1, X2, X3
 
 volatile uint8_t device_id; 								// идентификатор устройства, данные которого обрабатываютс€ по сигналу GPIO GP[1]
+
+uint8_t pp_is_seq_done = 0;									// индикатор завершени€ последовательности по команде COM_STOP
 
 volatile unsigned int UART_Dielec_counter = 0; 				// счетчик байт, приход€щих от диэлектрическго прибора
 volatile unsigned int UART_Dielec_pack_counter = 0; 		// счетчик пакетов длиной DIELECTR_DATA_LEN байт, приход€щих от диэлектрическго прибора
@@ -493,6 +497,65 @@ void main(void)
 	unsigned char conf_buf[0x20000];
 	memset(conf_buf, 0x00, 0x20000);
 	proger_rd_conf_mem ( conf_buf );
+#endif
+
+#ifdef DEBUG_READ_PROGER_STATUS
+	unsigned int pp_is_started  = 0xAA;
+	unsigned int pp_is_seq_done = 0xBB;
+
+	// check COM_STOP
+	proger_stop();
+	proger_mem_init();
+
+	pp_is_started  = proger_is_started();  //should be 0 for both
+	pp_is_seq_done = proger_is_seq_done();
+
+
+	proger_start();
+	dummyDelay(100);
+
+	pp_is_started  = proger_is_started();  //should be 1 for both
+	pp_is_seq_done = proger_is_seq_done();
+
+	proger_stop();
+
+	pp_is_started  = proger_is_started();  //should be 0 for both
+	pp_is_seq_done = proger_is_seq_done();
+
+	pp_is_started  = 0xAA;
+	pp_is_seq_done = 0xBB;
+
+
+	// check COM_RET
+	proger_stop();
+	proger_mem_clear();
+
+	pp_is_started  = proger_is_started();  //should be 0 for both
+	pp_is_seq_done = proger_is_seq_done();
+
+	proger_start();
+	dummyDelay(100);
+
+	pp_is_started  = proger_is_started();  //should be 1
+	pp_is_seq_done = proger_is_seq_done(); //should be 0
+
+	proger_stop();
+
+	pp_is_started  = proger_is_started();  //should be 0 for both
+	pp_is_seq_done = proger_is_seq_done();
+
+	pp_is_started--; pp_is_seq_done--;
+
+#endif
+
+#ifdef DEBUG_READ_PROGER_CONN_SPD
+	unsigned int pp_con_spd  = 0;
+
+	pp_con_spd  = proger_rd_connect_speed();  //should be something, not 0
+
+	pp_con_spd++;
+	pp_con_spd--;
+
 #endif
 
 	//upp init
@@ -873,6 +936,7 @@ void main(void)
 			//upp_reset_soft(); // перезапуск DMA, чтобы не дописывались данные в upp_buffer в процессе обработки
 			//memset(upp_buffer, 0x0, UPP_BUFF_SIZE);
 
+
 			//if (telemetry_ready == TELE_READY)
 			{
 				toMeasureTemperatures();
@@ -882,7 +946,7 @@ void main(void)
 			uint8_t pg = (uint8_t) proger_rd_pwr_pg();
 			uint8_t tele_flag = 0;
 			if (UART_telemetric_counter == TELEMETRIC_UART_BUF_LEN) tele_flag = 1;
-			uint8_t out_mask = pg | (tele_flag << 1);
+			/*uint8_t out_mask = pg | (tele_flag << 1);
 			switch (out_mask)
 			{
 			case 0:		sendByteArray(&NMRTool_Ready_PowerLow[0], SRV_MSG_LEN + 2, uartRegs); break;
@@ -890,12 +954,18 @@ void main(void)
 			case 2:		sendByteArray(&NMRTool_Ready_PowerLow_T[0], SRV_MSG_LEN + 2, uartRegs); break;
 			case 3:		sendByteArray(&NMRTool_Ready_PowerOK_T[0], SRV_MSG_LEN + 2, uartRegs); break;
 			}
+			*/
+			uint8_t pp_is_started  = proger_is_started();
+			pp_is_seq_done = proger_is_seq_done();
+			uint8_t out_mask = pg | (tele_flag << 1) | (pp_is_started << 2) | (pp_is_seq_done << 3);
+			sendByteArray(NMRTool_Ready[out_mask], SRV_MSG_LEN + 2, uartRegs);
 
 			if (timerSettings.enabled == False)
 			{
 				timerSettings.enabled = True;
 				enable_Timer(tmrRegs);
 			}
+
 		}
 		else if (tool_state == NOT_READY) // прибор завершил сеанс приема/передачи данных по кабелю (получен сигнал GP0[3] "down")
 		{
@@ -1401,12 +1471,34 @@ void main(void)
 			_enable_interrupts();
 		}
 
-		if (incom_msg_state == NOT_DEFINED && tool_state != BUSY)
+		//if (incom_msg_state == NOT_DEFINED && tool_state != BUSY)
+		if (incom_msg_state == NOT_DEFINED && tool_state == FREE)
 		{
 			if (telemetry_ready == TELE_READY)
 			{
 				toMeasureTemperatures();
 				telemetry_ready = TELE_NOT_READY;
+			}
+		}
+
+		//uint8_t pp_is_started  = proger_is_started();
+		uint8_t _pp_is_seq_done = proger_is_seq_done();
+		if (_pp_is_seq_done)
+		{
+			uint8_t clocker_state = getClockerState(clocker3);
+			if (clocker_state == CLR_STOPPED)
+			{
+				pp_is_seq_done = _pp_is_seq_done;
+
+				fpga_prg_started = False;
+				//proger_stop();		// check it !
+
+				timerSettings.enabled = True;
+				enable_Timer(tmrRegs);
+
+				startClocker(clocker3);
+				startClocker(clocker4);
+				incom_msg_state = NOT_DEFINED;
 			}
 		}
 	}
@@ -1457,8 +1549,6 @@ int definePinState_CmdAddr(int pinNumber, uint8_t * volatile cmd_addr)
 // »спользование START_BYTE и STOP_BYTE
 void onDataAvailable(QUEUE8* bytes)
 {
-	//_disable_interrupts();
-
 	static int cnt = 0;
 	if (input_data_enabled)
 	{
@@ -1491,7 +1581,7 @@ void onDataAvailable(QUEUE8* bytes)
 							int pack_count = (int) in_msg_header->pack_count;
 							int pack_len = (int) in_msg_header->pack_len;
 							//int inter_pack_delays = msg_settings->pack_delay * pack_count;
-							uint64_t packs_delay = 500 /* + inter_pack_delays * 2*/ + (pack_count * pack_len) / (uartSettings.BaudRate / 8.0) * 1000 * 2; // 2 - двойной запас по времени // it was 50
+							uint64_t packs_delay = 1000 /* + inter_pack_delays * 2*/ + (pack_count * pack_len) / (uartSettings.BaudRate / 8.0) * 1000 * 2; // 2 - двойной запас по времени // it was 50
 							//uint64_t packs_delay = 5000 + (pack_count * pack_len) / (uartSettings.BaudRate / 8.0) * 1000;
 							initClocker(packs_delay, clocker2_ISR, clocker2);
 							startClocker(clocker2);
@@ -1501,29 +1591,14 @@ void onDataAvailable(QUEUE8* bytes)
 					{
 						msg_header_state = FAILED;
 						incom_msg_state = FAILED;
-						/*int i = 0;
-						printf("Unknown message: ");
-						for (i = 0; i < head_q->cnt; i++)
-						{
-							printf("%d ", QUEUE8_at(i, head_q));
-							}
-						printf("\n");*/
 					}
 					stopClocker(clocker1);
-					//_enable_interrupts();
 					return;
 				}
 				else if (res == E_RS_NOTFOUND)
 				{
 					msg_header_state = FAILED;
 					incom_msg_state = FAILED;
-					/*int i = 0;
-					printf("Bad message: ");
-					for (i = 0; i < head_q->cnt; i++)
-					{
-						printf("%d ", QUEUE8_at(i, head_q));
-					}
-					printf("\n");*/
 				}
 				else if (res == E_RS_LEN)
 				{
@@ -1549,11 +1624,6 @@ void onDataAvailable(QUEUE8* bytes)
 			int pack_len = (int) in_msg_header->pack_len;
 			if (sz >= pack_count * pack_len)
 			{
-				//t_start = clock();
-				//t_stop = clock();
-				//t_overhead = t_stop - t_start;
-				//t_start = clock();
-
 				setupDDR2Cache();
 				enableCacheL1();
 				//while (sz-- > 0) QUEUE8_put(QUEUE8_get(bytes), body_q);
@@ -1561,9 +1631,6 @@ void onDataAvailable(QUEUE8* bytes)
 				incom_msg_state = PACKS_FINISHED;
 				msg_was_treated = MSG_DECODE_ERR;
 				disableCache();
-
-				//t_stop = clock();
-				//printf("\t NMR data processing time: %d clock cycles\n", (t_stop - t_start) - t_overhead);
 			}
 
 			if (incom_msg_state == PACKS_FINISHED)
@@ -1611,7 +1678,6 @@ void onDataAvailable(QUEUE8* bytes)
 			}
 		}
 	}
-	//_enable_interrupts();
 }
 /////
 
@@ -1630,7 +1696,8 @@ void executeShortMsg(MsgHeader *_msg_header)
 	case GET_DATA:
 	{
 		if (tool_state == UNKNOWN_STATE) return;
-		if (fpga_prg_started == False && UART_telemetric_counter != TELEMETRIC_UART_BUF_LEN && sdsp_started == False) return;
+		//if (fpga_prg_started == False && UART_telemetric_counter != TELEMETRIC_UART_BUF_LEN && sdsp_started == False) return;
+		if (fpga_prg_started == False && UART_telemetric_counter % TELEMETRIC_DATA_LEN > 0 && sdsp_started == False) return;
 
 		//printf("Get Data !\n");
 
@@ -1665,7 +1732,6 @@ void executeShortMsg(MsgHeader *_msg_header)
 		}
 		hdr->pack_len = pack_len;
 
-		//printf("data_fin_counter = %d\n", data_fin_counter);
 		while (dpos < data_fin_counter + 3)
 		{
 			//MsgPacket* pack = (MsgPacket*) malloc(sizeof(MsgPacket));
@@ -1690,9 +1756,6 @@ void executeShortMsg(MsgHeader *_msg_header)
 		free(pos);
 
 		disableCache();
-
-		//t_stop = clock();
-		//printf("\t NMR data processing time: %d clock cycles\n", (t_stop - t_start) - t_overhead);
 
 		sdsp_started = False;
 
@@ -1747,6 +1810,8 @@ void executeShortMsg(MsgHeader *_msg_header)
 	}
 	case NMRTOOL_START:
 	{
+		proger_stop();
+
 		fpga_prg_started = True;
 
 		MsgHeader *hdr = out_msg.msg_header;
@@ -1762,6 +1827,7 @@ void executeShortMsg(MsgHeader *_msg_header)
 		clearMsgHeader(out_msg.msg_header);
 
 		stopClocker(clocker3);
+		stopClocker(clocker4);	// added 16.08.2017
 		incom_msg_state = NOT_DEFINED;
 		//tool_state = FREE; 	// commented 16.03.2016
 		//upp_reset_soft(); // перезапуск DMA, чтобы не дописывались данные в upp_buffer в процессе обработки
@@ -1797,6 +1863,7 @@ void executeShortMsg(MsgHeader *_msg_header)
 		enable_Timer(tmrRegs);
 
 		startClocker(clocker3);
+		startClocker(clocker4);		// added 16.08.2017
 		incom_msg_state = NOT_DEFINED;
 
 		break;
@@ -1935,6 +2002,7 @@ void executeMultypackMsg(UART_Message *uart_msg)
 						fpga_prg_started = True;
 
 						stopClocker(clocker3);
+						stopClocker(clocker4);		// added 16.08.2017
 						incom_msg_state = NOT_DEFINED;
 						tool_state = FREE;
 						proger_start();
@@ -1945,10 +2013,7 @@ void executeMultypackMsg(UART_Message *uart_msg)
 					}
 				}
 			}
-			else
-			{
 
-			}
 			free(data_arr);
 			disableCache();
 
@@ -1960,13 +2025,13 @@ void executeMultypackMsg(UART_Message *uart_msg)
 			clearMsgHeader(out_msg.msg_header);
 
 			startClocker(clocker3);
+			startClocker(clocker4);		// added 16.08.2017
 			incom_msg_state = NOT_DEFINED;
 			tool_state = FREE;
 			proger_start();
 		}
 		else if (cmd == SET_WIN_PARAMS)
 		{
-			//proger_stop();
 			enableCacheL1();
 
 			uint8_t data_arr[64];
@@ -2009,8 +2074,6 @@ void executeMultypackMsg(UART_Message *uart_msg)
 
 			//free(data_arr);
 			disableCache();
-
-			//proger_start();
 		}
 		else if (cmd == SET_COMM_PARAMS)
 		{
@@ -2356,15 +2419,6 @@ void requestLastMsg()
 	tool_state = FREE;
 
 	stopClocker(clocker1);
-
-	//tmpb = 1;
-
-	/*printf("Header timed out: ");
-	for (i = 0; i < uart_queue->cnt; i++)
-	{
-		printf("%d ", QUEUE8_at(i, uart_queue));
-	}
-	printf("\n");*/
 }
 
 void create_Clockers(void)
@@ -2385,12 +2439,12 @@ void create_Clockers(void)
 	// create UART message clockers (for packet trapping)
 	clocker2 = (Clocker*) malloc(sizeof(Clocker));
 	clockers[2] = clocker2;
-	initClocker(500, clocker2_ISR, clocker2); // it was 120
+	initClocker(1000, clocker2_ISR, clocker2); // it was 120
 
 	// create clocker for repetition time tests (delay between pulse sequences)
 	clocker3 = (Clocker*) malloc(sizeof(Clocker));
 	clockers[3] = clocker3;
-	initClocker(500, clocker3_ISR, clocker3);
+	initClocker(1000, clocker3_ISR, clocker3);
 
 	// create clocker for telemetry measurements (delay between measurements)
 	clocker4 = (Clocker*) malloc(sizeof(Clocker));
@@ -2545,36 +2599,6 @@ interrupt void UART_isr(void)
 	else if (uartStatus == E_TRAN_BUF_EMPTY) transmitterFull = FALSE;
 }
 
-/*
- interrupt void UART_isr(void)
- {
- uint8_t byte;
-
- // Determine Prioritized Pending UART Interrupt
- uartStatus = CSL_FEXT(uartRegs->IIR, UART_IIR_INTID);
-
- // Set Appropriate Bool
- if (uartStatus == E_DATA_READY)
- {
- uartStatus = read_UART(uartRegs, &byte);
- if (uartStatus == E_OK)
- {
- #ifdef LOOPBACK_COMM_UART
- CSL_FINS(uartRegs->THR, UART_THR_DATA, byte);
- #endif
-
- QUEUE8_put(byte, uart_queue);
- }
- dataUnavailable = FALSE;
- }
- else if (uartStatus == E_TRAN_BUF_EMPTY) transmitterFull = FALSE;
-
- if (tool_state == BUSY)
- {
-
- }
- }
- */
 
 interrupt void UART_Dielec_isr(void)
 {
@@ -2736,22 +2760,11 @@ void clocker3_ISR(void)
 {
 	if (incom_msg_state == NOT_DEFINED)
 	{
-		/*_disable_interrupts();
-		QUEUE8_clear(uart_queue);
-		QUEUE8_clear(head_q);
-		BUFFER8_clear(body_q);
-
-		clearMsgHeader(in_msg_header);
-
-		msg_header_state = NOT_DEFINED;
-		incom_msg_state = NOT_DEFINED;
-		tool_state = FREE;
-		_enable_interrupts();*/
-
 		uint8_t pg = (uint8_t) proger_rd_pwr_pg();
 		uint8_t tele_flag = 0;
-		if (UART_telemetric_counter == TELEMETRIC_UART_BUF_LEN) tele_flag = 1;
-		uint8_t out_mask = pg | (tele_flag << 1);
+		//if (UART_telemetric_counter == TELEMETRIC_UART_BUF_LEN) tele_flag = 1;
+		if (UART_telemetric_counter % TELEMETRIC_DATA_LEN == 0 && UART_telemetric_counter > 0) tele_flag = 1;
+		/*uint8_t out_mask = pg | (tele_flag << 1);
 		switch (out_mask)
 		{
 		case 0:		sendByteArray(&NMRTool_Ready_PowerLow[0], SRV_MSG_LEN + 2, uartRegs); break;
@@ -2759,6 +2772,13 @@ void clocker3_ISR(void)
 		case 2:		sendByteArray(&NMRTool_Ready_PowerLow_T[0], SRV_MSG_LEN + 2, uartRegs); break;
 		case 3:		sendByteArray(&NMRTool_Ready_PowerOK_T[0], SRV_MSG_LEN + 2, uartRegs); break;
 		}
+		*/
+		uint8_t pp_is_started  = proger_is_started();
+		//pp_is_seq_done = proger_is_seq_done();
+		uint8_t out_mask = pg | (tele_flag << 1) | (pp_is_started << 2) | (pp_is_seq_done << 3);
+		sendByteArray(NMRTool_Ready[out_mask], SRV_MSG_LEN + 2, uartRegs);
+		pp_is_seq_done = proger_is_seq_done();
+
 	}
 	startClocker(clocker3);
 }

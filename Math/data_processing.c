@@ -143,6 +143,9 @@ void fill_DataProc(Data_Proc *d_proc, uint8_t *src, int len)
 {
 	if (src[0] == 0x00 || src[0] == 0xFF) return;
 
+	uint8_t tmp[1000];
+	memcpy(&tmp[0], src, len);
+
 	int index = 0;
 	int loc_index = 0;							// счетчик байт внутри блока инструкций procs[...]
 	int proc_num = 0;							// номер текущего блока инструкций procs[...]

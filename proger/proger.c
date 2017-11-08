@@ -107,6 +107,17 @@ unsigned int proger_rd_device_serial(void)
 }// proger_rd_device_serial
 /*---------------------------------------------------------------------------*/
 
+unsigned int proger_rd_connect_speed(void)
+{
+	volatile unsigned int connect_speed = 0xFFFFFFFF;
+
+	connect_speed  = proger_rd_reg_32(MEM_ADDR_DEVICE_CONN_SPD);
+
+	//return (device_serial);
+	return (connect_speed);
+}// proger_rd_connect_speed
+/*---------------------------------------------------------------------------*/
+
 int proger_rd_acquisition_info (unsigned char *array, unsigned int byte_count)
 {
 	volatile unsigned char *proger_proc_adr_clr, *proger_proc_adr_inc, *proger_proc_adr_dta;
@@ -234,7 +245,7 @@ int proger_mem_init ()
 	proger_stop ();
 	proger_reset_comm_fifo_counter();
 
-	memset(comm, 0x00, 4);
+	memset(comm, 0xFF, 4);
 
 	for (k = 0; k < PROG_MAX_COMMANDS; k++)
 	{
@@ -243,6 +254,26 @@ int proger_mem_init ()
 
 	return (1);
 }/* proger_mem_init */
+
+/*---------------------------------------------------------------------------*/
+
+int proger_mem_clear ()
+{
+	volatile unsigned char comm [4];
+	volatile unsigned int k;
+
+	proger_stop ();
+	proger_reset_comm_fifo_counter();
+
+	memset(comm, 0x00, 4);
+
+	for (k = 0; k < PROG_MAX_COMMANDS; k++)
+	{
+		proger_wr_comm_arr_to_fifo (comm);
+	}
+
+	return (1);
+}/* proger_mem_clear */
 
 /*---------------------------------------------------------------------------*/
 
@@ -396,6 +427,41 @@ int proger_rd_pwr_pg (void)
 }// proger_rd_pwr_pg
 
 /*---------------------------------------------------------------------------*/
+
+
+unsigned int proger_rd_status(void)
+{
+	volatile unsigned int data;
+
+	data = proger_rd_reg_32 (MEM_ADDR_STATUS_REG);
+	//data = data & 0x00000001;
+
+	return (data);
+}
+;
+
+unsigned int proger_is_started(void)
+{
+	volatile unsigned int data;
+
+	data = proger_rd_status();
+	data = data & 0x00000001;
+
+	return (data);
+}
+;
+
+unsigned int proger_is_seq_done(void)
+{
+	volatile unsigned int data;
+
+	data = proger_rd_status();
+	data = data & 0x00000002;
+	data = data >> 1;
+
+	return (data);
+}
+;
 
 int proger_rd_conf_mem ( unsigned char *data )
 {

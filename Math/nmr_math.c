@@ -1684,15 +1684,16 @@ void signalProcessing3(float **data_bank, float **hx_bank, int rad, Data_Cmd *in
 	int win_aver = (int)instr->params[6];		// параметр, определ€ющий метод накоплени€ сигнала: 0 - копить во временной области столько же раз, сколько и шум;
 												// 													1 - копить соседние эхо сигнала и шума в пределах окна шириной N
 	int group_index = (int)instr->params[7];	// групповой индекс
-	int probe_number = (int)instr->params[8];	// номер датчика яћ–
+	//int probe_number = (int)instr->params[8];	// номер датчика яћ–
+	uint8_t data_code = (uint8_t)instr->params[8];	// код данных
 
-	uint8_t data_code = DT_SGN_RELAX;
+	/*uint8_t data_code = DT_SGN_RELAX;
 	switch (probe_number)
 	{
-	case 2:	data_code = DT_SGN_RELAX2; break;
-	case 3: data_code = DT_SGN_RELAX3; break;
-	default: data_code = DT_SGN_RELAX; break;
-	}
+	case 2:		data_code = DT_SGN_RELAX2; break;
+	case 3: 	data_code = DT_SGN_RELAX3; break;
+	default: 	data_code = DT_SGN_RELAX; break;
+	}*/
 
 	//int current_echo = proc_params->current_echo;
 	int src_len = proc_params->points_count;

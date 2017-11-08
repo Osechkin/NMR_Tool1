@@ -163,5 +163,4 @@
 		<resource resourceType="PROJECT" workspacePath="/NMR_Tool1"/>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
-	<storageModule moduleId="scannerConfiguration"/>
 </cproject>

@@ -35,6 +35,11 @@ int proger_rd_group_index(void);			 // функция чтения номера группы последовател
 unsigned int proger_read_gpio ();
 unsigned int proger_rd_ch_number(void);      // функция чтения номера текущего канала данных, активированных командой COM_SET_FRQ
 unsigned int proger_rd_device_serial(void);  // функция чтения серийного номера прибора
+unsigned int proger_rd_connect_speed(void);  // функция чтения битовой скорости обмена данными с прибором
+
+unsigned int proger_rd_status(void);         // функция чтения статуса программатора (запущен (1) или остановлен (0) в бите 0, закончил (1) или не закончил (0) последовательность по команде COM_STOP  в бите 1)
+unsigned int proger_is_started(void);		 // возвращает 1 если программатор был запущен функцией proger_start, возвращает 0 если остановлен функцией stop
+unsigned int proger_is_seq_done(void);       // возвращает 1 если программатор дошел до команды COM_STOP и запущен функцией proger_start, возвращает 0 во всех других случаях
 
 int proger_rd_conf_mem ( unsigned char *data );
 
@@ -46,7 +51,9 @@ int proger_wr_comm_to_fifo (unsigned char comm, unsigned char arg1, unsigned cha
 
 int proger_rd_pulseprog (unsigned char *array, unsigned int byte_count);
 int proger_compare_pulseprog (unsigned char *array, unsigned int byte_count);
+
 int proger_mem_init ();
+int proger_mem_clear ();
 
 //int proger_test_mem_pulseprog ();
 //int main_proger_wr_pulseprog_test_GPIO3 ();
