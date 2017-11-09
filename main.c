@@ -3475,6 +3475,7 @@ void prepareOutputByteArray(OutBuffer *out_buff, SummationBuffer *sum_buff)
 		case DT_AFR1_RX:
 		case DT_AFR2_RX:
 		case DT_AFR3_RX:
+		case DT_SOLID_ECHO:
 		{
 			uint16_t data_in_bytes = (uint16_t) (data_len * sizeof(uint8_t));
 			data_fin[index++] = (uint8_t) data_id;

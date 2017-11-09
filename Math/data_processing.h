@@ -293,9 +293,7 @@ typedef unsigned short Bool;
 #define DT_SGN_SPEC3		0xAF	// спектр времен Т2 от измеренного спада поперечной намагниченности датчиком 3 (2^97 of Galois)
 #define DT_AVER_RELAX2		0x43	// усредненные данные спадов поперечной намагниченности с датчика 2 (2^98 of Galois)
 #define DT_AVER_RELAX3		0x86	// усредненные данные спадов поперечной намагниченности с датчика 3 (2^99 of Galois)
-#define DT_SOLID_ECHO1		0x22	// солид-эхо с датчика 1 (2^101 of Galois)
-#define DT_SOLID_ECHO2		0x44	// солид-эхо с датчика 2 (2^102 of Galois)
-#define DT_SOLID_ECHO3		0x88	// солид-эхо с датчика 3 (2^103 of Galois)
+#define DT_SOLID_ECHO		0x22	// солид-эхо с датчика 1 (2^101 of Galois)
 
 
 
