@@ -294,6 +294,9 @@ typedef unsigned short Bool;
 #define DT_AVER_RELAX2		0x43	// усредненные данные спадов поперечной намагниченности с датчика 2 (2^98 of Galois)
 #define DT_AVER_RELAX3		0x86	// усредненные данные спадов поперечной намагниченности с датчика 3 (2^99 of Galois)
 #define DT_SOLID_ECHO		0x22	// солид-эхо с датчика 1 (2^101 of Galois)
+#define DT_T1T2_NMR			0x44	// данные двумерной Т1-Т2 релаксометрии	(2^102 of Galois)
+#define DT_DsT2_NMR			0x88	// данные двумерной ЯМР релаксометрии-диффузометрии (Т1-Ds ЯМР)	(2^103 of Galois)
+#define DT_FREQ_TUNE		0x0D	// данные автонастройки частоты для ЯМР КЕРН
 
 
 
