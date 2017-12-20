@@ -507,35 +507,9 @@ void calcRecoveryPart(uint8_t *src, uint8_t *dst, MsgPacket *_msg_pack, GF_Data 
 	free(r);
 }
 
+/*
 int estimateBestPackLen(int data_len, int block_len, int rs_part_len)
 {
-	/*int pack_count = 1;
-	int max_len = 0;
-	Bool ready = False;
-	int res = 254;
-	while (!ready)
-	{
-		int full_data_len = data_len + PACK_HEAD_LEN + 1;
-		float full_len = ceil(full_data_len/(float)block_len)*rs_part_len + full_data_len;
-		int opt_pack_len = (int)(ceil(ceil(full_len/pack_count)/block_len)*block_len);
-
-		if (opt_pack_len > 254) pack_count++;
-		else
-		{
-			int final_len = opt_pack_len*pack_count;
-			if (max_len >= final_len)
-			{
-				max_len = final_len;
-				pack_count++;
-			}
-			else
-			{
-				res = opt_pack_len;
-				ready = True;
-			}
-		}
-	}*/
-
 	int res = (254/block_len)*block_len;
 	int N = 1;
 	//int data_all = 0x7FFFFFFF;	// максимально возможное целое цисло (для sizeof(int) = 4)
@@ -565,13 +539,6 @@ int estimateBestPackLen(int data_len, int block_len, int rs_part_len)
 			}
 			if (index >= 5) ready = True;
 		}
-		/*if (res*N > data_max && res <= 240)
-		{
-			if (data_max/(N-1) < 240) res = data_max/(N-1);
-			ready = True;
-		}
-		else data_max = res*N;*/
-		//data_max = res*N;
 
 		N++;
 	}
@@ -581,6 +548,29 @@ int estimateBestPackLen(int data_len, int block_len, int rs_part_len)
 
 	return res;
 }
+*/
+
+
+int estimateBestPackLen(int data_len, int block_len, int rs_part_len)
+{
+	int blocks = data_len/(block_len-rs_part_len);
+	if (data_len % (block_len-rs_part_len) > 0) blocks++;
+	int full_data_len = blocks*block_len;
+
+	int pack_len = (254/block_len)*block_len;
+	int new_pack_len = pack_len;
+	int pack_count = full_data_len/(new_pack_len-PACK_HEAD_LEN-1);
+	if (full_data_len % (new_pack_len-PACK_HEAD_LEN-1) > 0) pack_count++;
+
+	while (pack_count*(new_pack_len-PACK_HEAD_LEN-1) - full_data_len > 0)
+	{
+		pack_len = new_pack_len;
+		new_pack_len -= block_len;
+	}
+
+	return pack_len;
+}
+
 
 void pushDataToMsgPacket(uint8_t *data, uint16_t data_len, uint16_t *pos, MsgPacket *_msg_pack, GF_Data *_gf_data)
 {

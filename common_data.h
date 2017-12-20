@@ -97,6 +97,7 @@ static float ADC_to_mV = 0.3398;			// коэффициент перевода отсчетов АЦП в [мВ]
 #define SDSP_REQUEST_C8		0x7F			// отправка запроса 0xC8 на данные в диелектрический прибор (2^87 of Galois)
 #define SDSP_REQUEST_88		0xFE			// отправка запроса 0x88 на данные в диелектрический прибор (2^88 of Galois)
 #define LOG_TOOL_SETTINGS	0x11			// отправка настроек каналов каротажного прибора (2^100 of Galois)
+#define NMRTOOL_CONNECT_DEF	0x1A		// first connect to LoggingTool (2^105 of Galois)
 
 											// Формат: cmd (1 byte) -- len (2 bytes) -- func_type(time domain) -- x0(time domain) -- sigma (time domain) -- func_type(freq domain) -- x0(freq domain) -- sigma (freq domain)
 // Format of commands:

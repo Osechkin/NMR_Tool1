@@ -8,6 +8,7 @@
 #include "uart_hduplex/uart_hduplex.h"
 #include "spi/spi.h"
 
+
 #define USE_DIELEC_UART
 //#define DEBUG_DIELEC_UART
 //#define DEBUG_DIELEC_UART_BY_PULSEPROG
@@ -107,6 +108,7 @@ void generateTestEchoData(int index, int count);
 Bool extractDataFromPacks(UART_Message *uart_msg, uint8_t *arr, uint16_t *len);
 void executeProcPack(Data_Proc *proc, int index);
 void toMeasureTemperatures();
+void setDefaultCommSettings();
 //----------------------------------------------
 
 //----------------------------------------------
@@ -1622,6 +1624,7 @@ void onDataAvailable(QUEUE8* bytes)
 			int sz = QUEUE8_count(bytes);
 			int pack_count = (int) in_msg_header->pack_count;
 			int pack_len = (int) in_msg_header->pack_len;
+			//printf(" sz = %d ;",sz);
 			if (sz >= pack_count * pack_len)
 			{
 				setupDDR2Cache();
@@ -1808,6 +1811,31 @@ void executeShortMsg(MsgHeader *_msg_header)
 
 		break;
 	}
+	case NMRTOOL_CONNECT_DEF:
+		{
+			setDefaultCommSettings();
+
+			MsgHeader *hdr = out_msg.msg_header;
+			hdr->msg_type = MTYPE_SHORT;
+			hdr->reader = PC_MAIN;
+			hdr->writer = NMR_TOOL;
+			hdr->id = _msg_header->id;
+			memset(&hdr->data[0], 0x0, SRV_DATA_LEN * sizeof(uint8_t));
+			hdr->data[0] = NMRTOOL_CONNECT_DEF;
+			hdr->data[1] = (uint8_t)(device_serial & 0xFF);
+
+			sendShortMsg(hdr, uartRegs);
+			outcom_msg_state = MESSAGE_SENT;
+
+			clearMsgHeader(out_msg.msg_header);
+
+			timerSettings.enabled = True;
+			enable_Timer(tmrRegs);
+
+			proger_stop();
+
+			break;
+		}
 	case NMRTOOL_START:
 	{
 		proger_stop();
@@ -2460,6 +2488,18 @@ void create_Clockers(void)
 	// ******************************************
 }
 
+void setDefaultCommSettings()
+{
+	msg_settings->block_len = 20;
+	gf_data->index_body = 1;
+	msg_settings->rec_errs = gf_data->index_body + 1;
+	msg_settings->pack_len = 200;
+	msg_settings->antinoise_coding = True;
+	msg_settings->packlen_autoadjust = False;
+	msg_settings->interleaving = False;
+	msg_settings->pack_delay = 0;
+}
+
 void init_UART_MsgData(void)
 {
 	//int i;
@@ -2750,6 +2790,9 @@ void clocker2_ISR(void)
 	memset(&hdr->data[0], 0x0, SRV_DATA_LEN * sizeof(uint8_t));
 	hdr->data[0] = DATA_FAILED;
 	hdr->data[1] = msg_was_treated;
+
+	int d_len = uart_queue->cnt;
+	//printf("Received bytes: %d\n",d_len);
 
 	sendShortMsg(hdr, uartRegs);
 
