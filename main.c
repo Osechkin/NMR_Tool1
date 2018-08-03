@@ -886,9 +886,10 @@ void main(void)
 	printf("Start!\n");
 	P15_CLR();
 	tmpb = 0;
+	//volatile int ready_msg_sent = 0;
 	while (app_finish == 0)
 	{
-		/*if (tool_state != UNKNOWN_STATE)*/tool_state = defineToolState();
+		/*if (tool_state != UNKNOWN_STATE)*/ //tool_state = defineToolState();
 		check_stb();
 		if (stb[3] == STB_FALLING_EDGE) 	tool_state = NOT_READY;
 		else if (stb[3] == STB_RISING_EDGE) tool_state = READY;
@@ -961,6 +962,8 @@ void main(void)
 			pp_is_seq_done = proger_is_seq_done();
 			uint8_t out_mask = pg | (tele_flag << 1) | (pp_is_started << 2) | (pp_is_seq_done << 3);
 			sendByteArray(NMRTool_Ready[out_mask], SRV_MSG_LEN + 2, uartRegs);
+			//ready_msg_sent++;
+			//if (ready_msg_sent > 1) printf("Ready: %d\n", ready_msg_sent);
 
 			if (timerSettings.enabled == False)
 			{
@@ -1005,6 +1008,8 @@ void main(void)
 
 			GPIOBank0Pin1_initState(GPIO_HIGH_STATE);
 			sendByteArray(&NMRTool_NotReady[0], SRV_MSG_LEN + 2, uartRegs);
+			//ready_msg_sent = 0;
+			//printf("Not Ready: %d\n", notready_msg_sent);
 
 			memset(dielec_data, 0xFF, DIELECTR_DATA_LEN * sizeof(uint8_t));
 			UART_Dielec_counter = 0;
@@ -1023,6 +1028,13 @@ void main(void)
 
 		if (tool_state == BUSY) // прибор не доступен дл€ приема/передачи данных по кабелю (находитс€ в состо€нии приема и обработки данных яћ–, GP0[3] = "down")
 		{
+			/*if (ready_msg_sent > 0)	// если так и не отправилось сообщение "NMRTool_NotReady"
+			{
+				sendByteArray(&NMRTool_NotReady[0], SRV_MSG_LEN + 2, uartRegs);
+				ready_msg_sent = 0;
+				printf("Not Ready was sent !\n");
+			}*/
+
 			uppFull = False;
 
 			if (stb[1] == STB_FALLING_EDGE && pins_cmd == SDSP_TOOL)
@@ -1493,7 +1505,8 @@ void main(void)
 				pp_is_seq_done = _pp_is_seq_done;
 
 				fpga_prg_started = False;
-				//proger_stop();		// check it !
+				//proger_stop();		// check it ! // эта комманда приведет к сбросу флажка proger_is_seq_done() в ноль.
+													  //¬ключение/выключение этой команды может сильно сказатьс€ на работоспособности яћ–- ерн в части определени€ конца последовательности
 
 				timerSettings.enabled = True;
 				enable_Timer(tmrRegs);

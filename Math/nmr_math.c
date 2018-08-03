@@ -1715,11 +1715,16 @@ void signalProcessing3(float **data_bank, float **hx_bank, int rad, Data_Cmd *in
 		else NNN = NN/N;
 	}
 
+	float data_ns[2080];
+	float data_sgn[2080];
+
 	float SNs = 0;
 	int noise_echo = 0;
 	for (j = 0; j < NNN; j++)
 	{
 		memcpy(data2, hx_bank[noise_echo], DATA_MAX_LEN*sizeof(float));
+
+		memcpy(&data_ns[0], hx_bank[noise_echo], DATA_MAX_LEN*sizeof(float));
 
 		// ----- оконная функция во временной области -----
 		uint8_t func_id = 0;
@@ -1961,6 +1966,8 @@ void signalProcessing3(float **data_bank, float **hx_bank, int rad, Data_Cmd *in
 		memcpy(data0, hx_bank[signal_echo], DATA_MAX_LEN*sizeof(float));
 		memcpy(data2, hx_bank[noise_echo], DATA_MAX_LEN*sizeof(float));
 
+		memcpy(&data_sgn[0], hx_bank[signal_echo], DATA_MAX_LEN*sizeof(float));
+
 		// ----- оконная функция во временной области -----
 		uint8_t func_id = 0;
 		int x0 = 0;
@@ -2150,6 +2157,8 @@ void signalProcessing3(float **data_bank, float **hx_bank, int rad, Data_Cmd *in
 		}
 		// ------------------------------------------------
 
+		memcpy(&data_sgn[0], data0, DATA_MAX_LEN*sizeof(float));
+
 		// вычисление спектра сигнала по алгоритму Скирды В.Д.
 		float val = 0;
 		int sgn = 0;
@@ -2191,6 +2200,8 @@ void signalProcessing3(float **data_bank, float **hx_bank, int rad, Data_Cmd *in
 			break;
 		}
 		// ------------------------------------------------
+
+		memcpy(&data_sgn[0], data0, DATA_MAX_LEN*sizeof(float));
 
 		// помещение в выходной буфер частотного спектра мощности сигнала
 		// минус накопленный спктр мощности шума (алгоритм В.Д.Скирды)

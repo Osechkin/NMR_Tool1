@@ -43,8 +43,8 @@
 								</option>
 								<option id="com.ti.ccstudio.buildDefinitions.C6000_7.2.compilerID.INCLUDE_PATH.931912270" name="Add dir to #include search path (--include_path, -I)" superClass="com.ti.ccstudio.buildDefinitions.C6000_7.2.compilerID.INCLUDE_PATH" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;${CG_TOOL_ROOT}/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;C:\Program Files\Texas Instruments\bios_5_41_10_36\packages\ti\bios\include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;C:\Program Files\Texas Instruments\quickStartOMAPL1x_rCSL\OMAPL1x\support\includes&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;C:\TI\bios_5_41_11_38\packages\ti\bios\include\&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;C:\Program Files\Texas Instruments\quickStartOMAPL1x_rCSL\OMAPL1x\support\includes\&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;C:/Program Files/Texas Instruments/pspdrivers_01_30_01/packages&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;C:\Program Files\Texas Instruments\OMAPL138_StarterWare_1_10_03_03\include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;C:\Program Files\Texas Instruments\OMAPL138_StarterWare_1_10_03_03\include\hw&quot;"/>
@@ -116,11 +116,11 @@
 								<option id="com.ti.ccstudio.buildDefinitions.C6000_7.2.compilerID.SILICON_VERSION.1251416982" name="Target processor version (--silicon_version, -mv)" superClass="com.ti.ccstudio.buildDefinitions.C6000_7.2.compilerID.SILICON_VERSION" value="6740" valueType="string"/>
 								<option id="com.ti.ccstudio.buildDefinitions.C6000_7.2.compilerID.INCLUDE_PATH.2021390400" name="Add dir to #include search path (--include_path, -I)" superClass="com.ti.ccstudio.buildDefinitions.C6000_7.2.compilerID.INCLUDE_PATH" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;${CG_TOOL_ROOT}/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;C:\Program Files\Texas Instruments\bios_5_41_10_36\packages\ti\bios\include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;C:\Program Files\Texas Instruments\quickStartOMAPL1x_rCSL\OMAPL1x\support\includes&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;c:\TI\bios_5_41_11_38\packages\ti\bios\include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;C:/Program Files/Texas Instruments/quickStartOMAPL1x_rCSL/OMAPL1x/support/includes&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;C:/Program Files/Texas Instruments/pspdrivers_01_30_01/packages&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;C:\Program Files\Texas Instruments\OMAPL138_StarterWare_1_10_03_03\include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;C:\Program Files\Texas Instruments\OMAPL138_StarterWare_1_10_03_03\include\hw&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;c:\Program Files\Texas Instruments\OMAPL138_StarterWare_1_10_03_03\include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;c:\Program Files\Texas Instruments\OMAPL138_StarterWare_1_10_03_03\include\hw&quot;"/>
 								</option>
 								<option id="com.ti.ccstudio.buildDefinitions.C6000_7.2.compilerID.ABI.1857929643" name="Application binary interface (coffabi, eabi) (--abi)" superClass="com.ti.ccstudio.buildDefinitions.C6000_7.2.compilerID.ABI" value="com.ti.ccstudio.buildDefinitions.C6000_7.2.compilerID.ABI.coffabi" valueType="enumerated"/>
 								<option id="com.ti.ccstudio.buildDefinitions.C6000_7.2.compilerID.DEFINE.717678192" name="Pre-define NAME (--define, -D)" superClass="com.ti.ccstudio.buildDefinitions.C6000_7.2.compilerID.DEFINE" valueType="definedSymbols">
@@ -163,4 +163,5 @@
 		<resource resourceType="PROJECT" workspacePath="/NMR_Tool1"/>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
+	<storageModule moduleId="scannerConfiguration"/>
 </cproject>
