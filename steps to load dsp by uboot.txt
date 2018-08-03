@@ -1,0 +1,46 @@
+
+WRK
+
+stop autoload
+
+> loadb c0700000 38400
+
+switch terminal to 38400 and hit "Return" ("Enter") keyboard key,
+or send equivivalent hex number.
+
+close terminal, free COM port
+
+run Kermit application, File->Open 38400.krm,
+or set baudrate 38400, N, 8, 1.
+Session->Connect
+Kermit->Send...
+and choose *.out file (must be compiled like COFF file) and needs to be <512KB (at this moment, may be later w'll make the setting for larger filesize).
+
+Wait fo file to be transferred, then
+Session->Connect (uncheck)
+close Kermit
+
+Open terminal at 115200 bps baudrate, and hit "Esc" keyboard key,
+or send equivivalent hex number. You must see > (this is Uboot promt). 
+
+In uboot, type following commands (make sure there are NO mistakes):
+
+> sf probe 0
+> sf erase 600000 80000
+> sf write c0700000 600000 80000
+> sf read c0700000 600000 80000
+> bootdsp c0700000
+
+
+templates:
+sf probe 0; sf erase 600000 80000; sf write c0700000 600000 80000
+
+sf probe 0; sf erase 600000 0x170000; sf write c0700000 600000 0x170000
+
+bootcmdfpga=mw.l 0x6800001C 0x00000280; md.l 0x68000000 0x08; sf probe 0; sf read 0xC0700000 0x600000 0x170000; loadfpga 0xc0700000 0x170000;
+
+optional
+> setenv bootcmd "sf probe 0; sf read c0700000 600000 80000"
+
+or
+> setenv bootcmd "sf probe 0; sf read c0700000 600000 80000; bootdsp c0700000"
